@@ -1,0 +1,30 @@
+<oda-module id="reports-client-form-template-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .layout {
+        padding: 5px;
+      }
+    </style>
+    <div @click="onClick()" class="layout" v-if="item">
+      {{ item.label }}
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-client-form-template-list-item',
+      properties: {
+        item: Object,
+      },
+      getTemplate() {
+        return this.item && this.item.template || null;
+      },
+      onClick() {
+        this.fire('select-template', this.getTemplate());
+      },
+    });
+  </script>
+</oda-module>

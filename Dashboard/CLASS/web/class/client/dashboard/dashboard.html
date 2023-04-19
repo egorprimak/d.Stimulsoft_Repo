@@ -1,0 +1,115 @@
+<script src="/web/core/oda.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/xml-formatter.js"></script>
+<link href="components/dashboard/dashboard.html" rel="import">
+<link href="components/dashboard/admin-dashboard.html" rel="import">
+<link href="components/dashboard/client-dashboard.html" rel="import">
+<link href="components/info/input-form/input-form.html" rel="import">
+<link href="components/common.html" rel="import">
+<link href="../lib/material-icon/material-icon.html" rel="import">
+
+<oda-module id="oda-dashboard">
+  <template>
+    <div slot="body" style="display:flex; flex-direction: column; flex: 1; overflow: hidden">
+      <oda-dashboard-body :context-item.prop="module"></oda-dashboard-body>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'oda-dashboard',
+      properties: {
+        contextItem: {
+          type: Object,
+          async watch(o) {
+            if (!o) {
+              this.module = null;
+              return;
+            }
+            this.module = o.$module || await o.$base.findItem('M:1D6B0E8D28DF9EF');
+          },
+        },
+        module: Object,
+      },
+    });
+  </script>
+</oda-module>
+
+<oda-module id="oda-dashboard-body">
+  <template>
+    <style>
+      :host {
+        display: block;
+        height: 100%;
+        flex: 1;
+        user-select: text !important;
+      }
+
+      .mode-switcher {
+        display: flex;
+        align-items: center;
+        position: absolute;
+        right: 0;
+        top: 0;
+        z-index: 10;
+        padding: 3px 5px 3px 10px;
+        font-size: 11px;
+        cursor: pointer;
+        user-select: none;
+        background-color: #fff;
+        border-radius: 0 0 0 30px;
+        box-shadow: 0 0 3px rgba(0, 0, 0, .1);
+      }
+    </style>
+    <div @click="adminMode = !adminMode; render()" class="mode-switcher"
+         v-if="contextItem && contextItem.access.allowAdmin">
+      <material-icon :icon="'toggle_' + (adminMode ? 'on' : 'off')" style="line-height: 0;"></material-icon>
+      Режим администратора
+    </div>
+    <reports-admin-dashboard 
+      :context-item.prop="contextItem"
+      :need-dashboards-functional.prop="needDashboardsFunctional"
+      style="flex: 1" 
+      v-if="adminMode"
+    ></reports-admin-dashboard>
+    <reports-client-dashboard 
+      :context-item.prop="contextItem" 
+      :need-dashboards-functional.prop="needDashboardsFunctional"
+      style="flex: 1" 
+      v-else
+    ></reports-client-dashboard>
+  </template>
+  <script>
+    ODA({
+      is: 'oda-dashboard-body',
+      extends: 'common-service',
+      properties: {
+        contextItem: {
+          type: Object,
+          async watch(item) {
+            if (!item) {
+              return;
+            }
+            await this._initComponent();
+          },
+        },
+        adminMode: false,
+        needDashboardsFunctional: false,
+      },
+      isClientModeInUrl() {
+        return /[?&]client-mode/ig.test(window.location.href);
+      },
+      async _initComponent() {
+        const item = this.contextItem;
+        this.adminMode = !this.isClientModeInUrl() && !!(item && item.access && item.access.allowAdmin);
+        await this._initNeedDashboardsFunctionalFlag();
+      },
+      async _initNeedDashboardsFunctionalFlag() {
+        const dashboardClass = await this._getDashboardClass();
+        const staticObject = await this._getClassStaticObject(dashboardClass);
+        if (!staticObject) {
+          return;
+        }
+        this.needDashboardsFunctional = staticObject?.Root?.needDashboardsFunctional === 'True';
+      }
+    });
+  </script>
+</oda-module>

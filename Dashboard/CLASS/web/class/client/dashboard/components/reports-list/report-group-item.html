@@ -1,0 +1,87 @@
+<link href="../../../lib/action-btn.html" rel="import">
+<link href="../../../lib/loading-spinner.html" rel="import">
+<link href="../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../common.html" rel="import">
+
+<oda-module id="reports-report-group-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 10px;
+        color: #19478a;
+        font-size: 1.1em;
+      }
+
+      .layout {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+    </style>
+    <div class="layout" v-if="item">
+      <b>{{ item.label }}</b>
+      <div class="actions" v-if="item.adminMode">
+        <action-btn @click="create()" class="item" title="Создать отчет" v-if="!_creating">
+          <material-icon icon="add_box"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-report-group-item',
+      extends: 'common-service',
+      properties: {
+        item: Object,
+        contextItem: {
+          type: Object,
+          get() {
+            return this.item && this.item.contextItem || null;
+          },
+        },
+        _creating: false,
+      },
+      create() {
+        this._creating = true;
+        this._getNameOfNewReport()
+          .then(name => {
+            if (!String(name).trim()) {
+              return;
+            }
+            return this._createReport(name, { autoSelect: true })
+              .catch((err) => {
+                alert(`Не удалось создать отчет\nError: ${err && err.message || 'Unknown error'}`);
+              });
+          })
+          .finally(() => {
+            this._creating = false;
+          });
+      },
+      _getNameOfNewReport() {
+        const name = prompt('Введите название нового отчета', 'Новый отчет') || '';
+        return Promise.resolve(name);
+      },
+    });
+  </script>
+</oda-module>

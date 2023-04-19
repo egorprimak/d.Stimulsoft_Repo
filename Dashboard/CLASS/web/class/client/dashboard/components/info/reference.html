@@ -1,0 +1,130 @@
+<link href="../../../lib/button.html" rel="import">
+
+<oda-module id="report-info-reference">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        flex: 1;
+        font-size: 14px;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+
+      .list {
+        border: 0;
+        border-spacing: 0;
+      }
+
+      .list td:first-child {
+        padding: 3px 10px;
+      }
+
+      .list td {
+        padding: 3px;
+        border-bottom: 1px solid #eaeaea;
+      }
+
+      .visible-controller {
+        width: 120px;
+      }
+    </style>
+    <div class="panel">
+      <h4 class="title">Справка</h4>
+      <app-button class="visible-controller" v-if="!visible" icon="expand_more" @click="visible = true">Показать</app-button>
+      <app-button class="visible-controller" v-if="visible" icon="expand_less" @click="visible = false">Скрыть</app-button>
+    </div>
+    <div class="layout" v-show="visible">
+      <p>В запросах доступны системные переменные:</p>
+      <table class="list">
+        <tr><td>[%user_id%]</td><td>идентификатор пользователя</td></tr>
+        <tr><td>[%host_id%]</td><td>идентификатор хоста</td></tr>
+        <tr><td>[%template_name%]</td><td>наименование выбранного пользователем шаблона для печати (при тестировании - имя отчета)</td></tr>
+        <tr><td>[%template_type%]</td><td>тип шаблона для печати (report или dashboard)</td></tr>
+        <tr><td>[%is_report%]</td><td>логическое значение, указывающее является ли печатный шаблон отчетом</td></tr>
+        <tr v-if="needDashboardsFunctional"><td>[%is_dashboard%]</td><td>логическое значение, указывающее является ли печатный шаблон дашбордом</td></tr>
+      </table>
+      <p><b>При указании источника запроса</b> переменные не работают, но <b>поддерживается указание пути без HOST и
+        PART.</b></p>
+      <p>Доступные форматы:</p>
+      <table class="list">
+        <tr><td>MDC</td><td>Report Snapshot</td></tr>
+        <tr><td>PDF</td><td>Adobe PDF</td></tr>
+        <tr><td>PPTX</td><td>Microsoft PowerPoint</td></tr>
+        <tr><td>HTML</td><td>HTML страница</td></tr>
+        <tr><td>TXT</td><td>текст</td></tr>
+        <tr><td>DOCX</td><td>Microsoft Word</td></tr>
+        <tr><td>ODT</td><td>OpenDocument Writer</td></tr>
+        <tr><td>XLSX</td><td>Microsoft Excel</td></tr>
+        <tr><td>ODS</td><td>OpenDocument Calc</td></tr>
+        <tr><td>CSV</td><td>значения, разделенные запятыми</td></tr>
+        <tr><td>SVG</td><td>векторное изображение</td></tr>
+      </table>
+      <p><b>По умолчанию используется формат MDC.</b></p>
+      <p><b>Предпросмотр отчета доступен только для формата MDC.</b></p>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-info-reference',
+      properties: {
+        visible: false,
+        needDashboardsFunctional: false
+      }
+    });
+  </script>
+</oda-module>

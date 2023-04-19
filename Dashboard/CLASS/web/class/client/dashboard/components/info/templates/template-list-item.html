@@ -1,0 +1,317 @@
+<link href="../../common.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+
+<oda-module id="report-template-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+      }
+
+      .detail {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .date {
+        opacity: .8;
+        font-size: .8em;
+        margin-right: 10px;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .label,
+      .label-editor {
+        width: 100%;
+        margin-right: 10px;
+      }
+
+      .label-editor {
+        border: none;
+        border-bottom: 1px solid #19478a;
+        background-color: transparent;
+        color: inherit;
+        font: inherit;
+        outline: none;
+      }
+
+      .action + action-btn,
+      action-btn + .action,
+      action-btn + action-btn {
+        margin-left: 5px;
+      }
+
+      .author {
+        color: #0375ff;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+    </style>
+    <div class="detail" v-if="item && template">
+      <div class="date" title="Дата создания">[{{date}}]</div>
+      <input :class="{ author: isAuthor }" @blur="onInputBlur()" @keydown="onInputKeydown($event)" class="label-editor"
+             ref="labelEditor" type="text" v-if="editMode" v-model="label">
+      <div :class="{ author: isAuthor }" @dblclick="enableEditMode" class="label" v-else>{{ label }}
+      </div>
+      <div class="actions">
+        <div class="action" v-if="showProcess">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="rename(label)" title="Сохранить (Enter)" v-if="editMode && isLabelEdited()">
+          <material-icon icon="save"></material-icon>
+        </action-btn>
+        <action-btn @click="load()" title="Выгрузить" v-if="template.file">
+          <material-icon icon="get_app"></material-icon>
+        </action-btn>
+        <action-btn @click="print()" title="Печать" v-if="!_generate && template.file">
+          <material-icon icon="print"></material-icon>
+        </action-btn>
+        <div class="action loader" v-if="template.file && _generate">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="edit()" title="Изменить">
+          <material-icon icon="launch"></material-icon>
+        </action-btn>
+        <action-btn @click="remove()" active-color="red" title="Удалить">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-template-list-item',
+      extends: 'common-service',
+      properties: {
+        item: Object,
+        label: '',
+        editMode: false,
+        showProcess: false,
+        template: null,
+        date: {
+          type: String,
+          get() {
+            if (!this.template) {
+              return null;
+            }
+            return new Date(this.template.date).toLocaleDateString('ru');
+          },
+        },
+        isAuthor: {
+          type: Boolean,
+          get() {
+            return !!(this.template && this.template.Author === ODANT.$connection.userId);
+          },
+        },
+        report: {
+          type: Object,
+          get() {
+            return this.item && this.item.report || null;
+          },
+        },
+        contextItem: {
+          type: Object,
+          get() {
+            return this.item && this.item.contextItem || null;
+          },
+        },
+        _generate: false,
+
+        reportType: {
+          type: String,
+          get() {
+            return this.report && this._getTypeOfReport(this.report) || null;
+          },
+        },
+      },
+      observers: [
+        function itemChange(item) {
+          this.resetLabel();
+          this.template = this.getSourceTemplate();
+        },
+      ],
+      async print() {
+        this._generate = true;
+
+        const attachProcessHandler = (process) => {
+          process
+            .then((data) => {
+              if (data === undefined) {
+                alert('Превышено время ожидания формирования отчета. Готовый документ будет доступен позже в списке сформированных отчетов');
+                return;
+              }
+              if (data === 'undefined') {
+                alert('Произошла ошибка. Поробности в списке сформированных отчетов');
+              }
+              if (data.error) {
+                alert('Произошла ошибка: ' + String(data.error));
+              }
+              if (data.result) {
+                if (confirm('Отчет успешно сформирован. Открыть?')) {
+                  this._openResultDocument(data.result);
+                }
+              }
+            })
+            .finally(() => {
+              this._generate = false;
+            });
+        };
+
+        if (this.reportType === 'report') {
+          const process = this._getInputParametersForReport(this.report, true)
+            .then(input => this._generateTemplateOfReport(this.template.oid, this.report.id, this.reportType, input));
+          attachProcessHandler(process);
+        } else {
+          const msg = 'Вы уверены, что хотите сгенерировать документ из всех объектов класса?';
+          if (confirm(msg)) {
+            const process = this._generateTemplateOfReport(this.template.oid, this.report.id, this.reportType);
+            attachProcessHandler(process);
+          } else {
+            this._generate = false;
+          }
+        }
+      },
+      enableEditMode() {
+        this.editMode = true;
+
+        setTimeout(() => {
+          const editor = this.$refs && this.$refs.labelEditor;
+          if (editor) {
+            editor.focus();
+          }
+        });
+      },
+      disableEditMode() {
+        this.editMode = false;
+      },
+      resetLabel() {
+        this.label = this.getSourceLabel();
+      },
+      getSourceLabel() {
+        return this.item && this.item.label || '';
+      },
+      getSourceTemplate() {
+        return this.item && this.item.template || null;
+      },
+      getSourceTemplatesRepository() {
+        return this.item && this.item.repository || null;
+      },
+      async getTemplate() {
+        const sourceTpl = this.getSourceTemplate();
+        if (!sourceTpl) {
+          return null;
+        }
+        const cls = this.getSourceTemplatesRepository();
+        return await cls.getObject(sourceTpl.oid);
+      },
+      onInputKeydown(e) {
+        switch (e.key) {
+          case 'Escape':
+            this.disableEditMode();
+            this.resetLabel();
+            break;
+          case 'Enter':
+            this.rename(this.label);
+            break;
+        }
+      },
+      onInputBlur() {
+        if (!this.isLabelEdited()) {
+          this.disableEditMode();
+        }
+      },
+      isLabelEdited() {
+        return this.label !== this.getSourceLabel();
+      },
+      rename(name) {
+        if (this.isLabelEdited()) {
+          this.runProcess(new Promise(async (resolve) => {
+            const tpl = await this.getTemplate();
+            if (tpl) {
+              tpl.Root.name = name;
+              this.item.label = name;
+              await tpl.save();
+            }
+            this.disableEditMode();
+            resolve();
+          }));
+        } else {
+          this.disableEditMode();
+        }
+      },
+      remove() {
+        if (confirm(`Вы уверены, что хотите удалить шаблон "${this.getSourceLabel()}"?`)) {
+          this._remove();
+        }
+      },
+      edit() {
+        this.fire('open-designer', {
+          template: this.getSourceTemplate().oid,
+        });
+      },
+      runProcess(thenable) {
+        this.showProcess = true;
+        thenable.finally(() => {
+          this.showProcess = false;
+        });
+      },
+
+      async load() {
+        const tpl = await this.getTemplate();
+        const content = await this._getFileContent();
+
+        if (!content) {
+          alert('Нет содержимого для загрузки');
+          return;
+        }
+
+        this._saveAsFile(content, `${tpl.name}.mrt`, 'application/json');
+      },
+
+      async _getFileContent() {
+        const tpl = await this.getTemplate();
+        if (!tpl) {
+          return null;
+        }
+        const cls = tpl.$class;
+        const fileField = await this._getFieldOfClass('file', cls);
+        const file = await fileField.getValue(tpl, tpl.Root);
+        if (!file) {
+          return null;
+        }
+        const hash = Math.round(Math.random() * 1e15).toString(16);
+        return await fetch(`/api${file.fullId}?h=${hash}`).then(res => res.text()).catch(() => null);
+      },
+
+      _remove() {
+        this.fire('remove-template', this.getSourceTemplate());
+      },
+
+      _saveAsFile(content, name, type = 'text/plain') {
+        const blob = new Blob([String(content)], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', name);
+        link.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+        return true;
+      },
+    });
+  </script>
+</oda-module>

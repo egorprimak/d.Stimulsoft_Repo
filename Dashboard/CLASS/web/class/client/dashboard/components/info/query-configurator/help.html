@@ -1,0 +1,154 @@
+<link href="/web/lib/code-mirror/code-mirror.html" rel="import">
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../../../lib/divider.html" rel="import">
+
+<oda-module id="app-query-help">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+    </style>
+    <app-list
+        :focused-state-enabled.prop="false"
+        :items.prop="sections"
+        item-template="app-query-help-item"
+        selection-mode="single"
+    ></app-list>
+  </template>
+  <script>
+    ODA({
+      is: 'app-query-help',
+      properties: {
+        sections: [
+          {
+            label: 'Вернуть один элемент',
+            query: 'element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '}',
+          },
+          {
+            label: 'Вернуть несколько элементов',
+            query: 'element PACK {\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  },\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  },\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  }\n' +
+              '  (: and more :)\n' +
+              '}',
+          },
+          {
+            label: 'Настроить отчет',
+            query: 'element PACK {\n' +
+              '  (: Common parameters: :)\n' +
+              '  attribute Name { "Custom Report Name" },\n' +
+              '  attribute Format { "pdf" }, (: Set format (see available report formats) :)\n' +
+              '\n' +
+              '\n' +
+              '  (: Parameters for XLSM (all required!) :)\n' +
+              '  attribute Template { "template name without format" },\n' +
+              '  attribute Action { "filename of script without format" },\n' +
+              '  element Colums {\n' +
+              '    (: Columns count must be >= 1 :)\n' +
+              '    element column {\n' +
+              '      attribute name { "column_name" },\n' +
+              '      attribute label { "Label" },\n' +
+              '      attribute type { "number, date or string" }\n' +
+              '    }\n' +
+              '  },\n' +
+              '\n' +
+              '  \n' +
+              '  (: Items of report :)\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  },\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  },\n' +
+              '  element OBJECT {\n' +
+              '    (: Attributes & Child nodes :)\n' +
+              '  }\n' +
+              '  (: and more :)\n' +
+              '}',
+          },
+          {
+            label: 'Вернуть группу отчетов',
+            query: 'element REPORTS {\n' +
+              '  attribute GroupName { "Group name" }, (: optional :)\n' +
+              '\n' +
+              '  element PACK {\n' +
+              '    (: [Report parameters & ]items :)\n' +
+              '  },\n' +
+              '  element PACK {\n' +
+              '    (: [Report parameters & ]items :)\n' +
+              '  },\n' +
+              '  element PACK {\n' +
+              '    (: [Report parameters & ]items :)\n' +
+              '  }\n' +
+              '  (: and more :)\n' +
+              '}',
+          },
+        ],
+      },
+    });
+  </script>
+</oda-module>
+
+<oda-module id="app-query-help-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+      }
+
+      :host(.selected) .code {
+        height: 300px;
+        margin-top: 5px;
+      }
+
+      .code {
+        position: relative;
+        transition: .3s;
+        background-color: #fff;
+        color: #555;
+        overflow: hidden;
+        border-radius: 3px;
+        height: 0;
+      }
+
+      .editor {
+        width: 100%;
+        height: 300px;
+      }
+    </style>
+    <div class="code" @click.stop @dblclick.stop @keydown.stop>
+      <oda-code-mirror
+          :value.prop="query"
+          class="editor"
+          mode="xquery"
+          ref="editor"
+      ></oda-code-mirror>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'app-query-help-item',
+      extends: 'app-list-item',
+      properties: {
+        item: Object,
+        query: {
+          type: String,
+          get() {
+            return this.item && this.item.query || '';
+          },
+        },
+      },
+    });
+  </script>
+</oda-module>

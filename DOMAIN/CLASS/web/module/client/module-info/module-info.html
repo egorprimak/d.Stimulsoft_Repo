@@ -1,0 +1,22 @@
+<script src="/web/core/oda.js"></script>
+<link href="../../../../../C:1D6EE3EE7BFC08A/web/class/client/dashboard/dashboard.html" rel="import">
+<link href="../../../../../C:1D6EE3EE7BFC08A/web/class/client/dashboard/admin-dashboard.html" rel="import">
+<link href="../../../../../C:1D6EE3EE7BFC08A/web/class/client/dashboard/client-dashboard.html" rel="import">
+<link href="../../../../../C:1D6EE3EE7BFC08A/web/class/client/dashboard/components/info/input-form/input-form.html" rel="import">
+<link href="../../../../../C:1D6EE3EE7BFC08A/web/class/client/lib/material-icon/material-icon.html" rel="import">
+
+<oda-module id="oda-module-info">
+  <template>
+    <div slot="body" style="display:flex; flex-direction: column; flex: 1; overflow: hidden">
+      <oda-dashboard-body :context-item.prop="contextItem"></oda-dashboard-body>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'oda-module-info',
+      properties: {
+        contextItem: Object,
+      },
+    });
+  </script>
+</oda-module>

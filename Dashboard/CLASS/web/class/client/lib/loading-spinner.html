@@ -1,0 +1,78 @@
+<oda-module id="loading-spinner">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .loader {
+        border-radius: 50%;
+      }
+
+      .loader:after {
+        border-radius: inherit;
+        width: inherit;
+        height: inherit;
+      }
+
+      .loader {
+        box-sizing: border-box;
+        display: inline-block;
+        margin: 0;
+        position: relative;
+        text-indent: -9999em;
+        transform: translateZ(0);
+      }
+
+      @-webkit-keyframes load8 {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes load8 {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <div :style="_loaderStyle" class="loader"></div>
+  </template>
+  <script>
+    ODA({
+      is: 'loading-spinner',
+      properties: {
+        size: 50,
+        color: 'rgb(25,71,138)',
+        roundColor: 'rgba(25,71,138, .2)',
+        borderSize: 3,
+        speed: 1000,
+        _loaderStyle: {
+          type: Object,
+          get() {
+            const size = this._convertSize(this.size);
+            return {
+              borderTop: `1.1em solid ${this.roundColor}`,
+              borderRight: `1.1em solid ${this.roundColor}`,
+              borderBottom: `1.1em solid ${this.roundColor}`,
+              borderLeft: `1.1em solid ${this.color}`,
+              width: size,
+              height: size,
+              fontSize: this._convertSize(this.borderSize),
+              animation: `load8 ${this.speed}ms infinite linear`,
+            };
+          },
+        },
+      },
+      _convertSize(value) {
+        return typeof value === 'number' ? `${value}px` : value;
+      },
+    });
+  </script>
+</oda-module>

@@ -1,0 +1,250 @@
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="template-list-item.html" rel="import">
+
+<oda-module id="report-templates">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      action-btn + .action-item,
+      .action-item + action-btn,
+      action-btn + action-btn {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+    </style>
+    <header class="panel">
+      <h4 class="title">Шаблоны <span class="count" v-if="count > 0">[{{count}}]</span></h4>
+      <div class="actions">
+        <action-btn @click="update()" title="Обновить" v-if="!_updating">
+          <material-icon icon="update"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="create()" title="Создать" v-if="!_creating">
+          <material-icon icon="add_box"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="removeAll()" active-color="red" title="Удалить все" v-if="!_removing">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </header>
+    <div class="layout" v-if="ready">
+      <p class="error" v-if="error">
+        {{ error && error.message || 'Unknown error' }}
+      </p>
+      <div class="layout" v-else>
+        <app-list
+            :focused-state-enabled.prop="false"
+            :hover-state-enabled.prop="false"
+            :items.prop="templates"
+            @remove-template="_remove($event.detail.value)"
+            item-template="report-template-list-item"
+            no-data-text="Шаблоны не найдены"
+            ref="list"
+        ></app-list>
+        <ul class="hints" v-if="$refs.list && !$refs.list.noItems">
+          <li>Двойной клик по имени для переименования</li>
+          <li>Синим цветом отмечены ваши шаблоны</li>
+        </ul>
+      </div>
+    </div>
+    <div v-else>
+      <loading-spinner size="40"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-templates',
+      extends: 'common-service',
+      properties: {
+        ready: false,
+        error: null,
+        templates: [],
+        report: Object,
+        contextItem: Object,
+        count: {
+          type: Number,
+          get() {
+            return Array.isArray(this.templates) ? this.templates.length : 0;
+          },
+        },
+        _updating: false,
+        _creating: false,
+        _removing: false,
+        _changeHandler: Function,
+        _index: null,
+      },
+      observers: [
+        async function contextItemOrReportChange(contextItem, report) {
+          await this._initComponent();
+        },
+      ],
+
+      create() {
+        const name = prompt('Введите название шаблона', 'Новый шаблон');
+        if (name === null || !name.trim()) {
+          return;
+        }
+        this._creating = true;
+        this._createTemplate(this.report, name)
+          .then(async (template) => {
+            await this._addTemplateOdaObject(template);
+          })
+          .finally(() => {
+            this._creating = false;
+          });
+      },
+
+      removeAll() {
+        if (confirm('Вы уверены, что хотите удалить все шаблоны?')) {
+          this._removeAll();
+        }
+      },
+
+      update() {
+        const start = performance.now();
+        this._updating = true;
+        this._loadData().finally(() => {
+          const finish = performance.now();
+          const delay = Math.max(1000 - finish + start, 0);
+          setTimeout(() => {
+            this._updating = false;
+          }, delay);
+        });
+      },
+
+      async _initComponent() {
+        this.ready = false;
+        this.error = null;
+        this._reset();
+        try {
+          await this._loadData();
+        } catch (err) {
+          this.error = err;
+        }
+        this.ready = true;
+      },
+
+      _reset() {
+        this.templates = [];
+      },
+
+      async _loadData() {
+        const [repository, templates] = await Promise.all([
+          this._getTemplatesClass(),
+          this._getTemplates(this.report),
+        ]);
+        this.templates = this._wrapTemplates(templates, repository);
+      },
+
+      _removeAll() {
+        this._removing = true;
+        const templates = this.templates.map(i => i.template);
+        this._removeTemplates(templates)
+          .then((res) => {
+            if (res) {
+              this.templates = [];
+            }
+          })
+          .finally(() => {
+            this._removing = false;
+          });
+      },
+
+      async _remove(template) {
+        const idx = this.templates.findIndex(i => i.template === template);
+        if (idx !== -1) {
+          this.templates.splice(idx, 1);
+          await this._removeTemplate(template);
+        }
+      },
+
+      async _addTemplateOdaObject(template) {
+        const repository = await this._getTemplatesClass();
+        this.templates.unshift(this._wrapTemplate(template.Root, repository));
+      },
+
+      _wrapTemplates(templates, repository) {
+        return templates.map(t => this._wrapTemplate(t, repository));
+      },
+
+      _wrapTemplate(template, repository) {
+        return {
+          label: template.name,
+          template,
+          repository,
+          report: this.report,
+          contextItem: this.contextItem,
+        };
+      },
+    });
+  </script>
+</oda-module>

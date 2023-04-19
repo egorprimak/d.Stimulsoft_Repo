@@ -1,0 +1,203 @@
+<link href="../../../lib/button.html" rel="import">
+<link href="../../../lib/divider.html" rel="import">
+<link href="../common.html" rel="import">
+<link href="templates/templates.html" rel="import">
+<link href="dashboards/dashboards.html" rel="import">
+<link href="query-configurator/query-configurator.html" rel="import">
+<link href="results/results-list.html" rel="import">
+<link href="input-parameters/parameters.html" rel="import">
+<link href="parameters/parameters.html" rel="import">
+<link href="reference.html" rel="import">
+<link href="preview-data/preview-data.html" rel="import">
+<link href="validator/validator-configurator.html" rel="import">
+<link href="access/access-configurator.html" rel="import">
+
+<oda-module id="report-info">
+  <template>
+    <style>
+      :host {
+        display: block;
+        max-width: 1000px;
+        padding-bottom: 30px;
+      }
+
+      .divider {
+        margin: 10px 0;
+      }
+
+      .actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .actions-group {
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .templates,
+      .dashboards,
+      .results {
+        height: 400px;
+        overflow: hidden;
+      }
+
+      .actions-group app-button {
+        margin-right: 5px;
+      }
+
+      .tabs {
+        margin-top: 15px;
+      }
+
+      .tabs_nav {
+        list-style: none;
+        display: flex;
+        padding: 0;
+        margin: 0;
+      }
+
+      .tabs_nav li {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 3px 15px;
+        transition: .1s;
+        flex: 1;
+        text-align: center;
+        cursor: pointer;
+        color: #000
+      }
+
+      .tabs_nav li material-icon {
+        margin: 3px 10px 0 0;
+      }
+
+      .tabs_nav li:hover {
+        background-color: rgba(25, 71, 138, .1);
+      }
+
+      .tabs_nav li.active {
+        background-color: #19478a;
+        color: #fff;
+      }
+
+      .tabs_content {
+        padding: 0 15px;
+        border: 1px solid #bababa;
+      }
+
+      report-validator-configurator {
+        margin-top: 15px;
+      }
+    </style>
+    <div v-if="report">
+      <h2>{{ report.name }}</h2>
+      <div class="actions">
+        <div class="actions-group">
+          <app-button @click="report.open()" icon="launch" title="Открыть представление по умолчанию"
+                      v-if="_reportType === 'class'">Открыть
+          </app-button>
+          <app-button @click="report.open('form', 'configurator')" icon="launch" title="Открыть конфигуратор"
+                      v-if="_reportType === 'class'">Конфигуратор
+          </app-button>
+          <app-button @click="_openDesignerFromContext()" icon="launch" title="Открыть дизайнер без шаблона">Дизайнер
+          </app-button>
+        </div>
+        <div class="actions-group">
+          <app-button :disabled="_deleting" :icon="_deleting ? 'hourglass_top' : 'delete'" @click="_remove()"
+                      type="danger">Удалить
+          </app-button>
+        </div>
+      </div>
+      <div v-if="_reportType === 'report'">
+        <app-divider class="divider"></app-divider>
+        <report-parameters :context-item.prop="contextItem" :report.prop="report"></report-parameters>
+        <app-divider class="divider"></app-divider>
+        <report-info-reference :need-dashboards-functional.prop="needDashboardsFunctional"></report-info-reference>
+        <app-divider class="divider"></app-divider>
+        <report-access-configurator :context-item.prop="contextItem" :report.prop="report"></report-access-configurator>
+        <app-divider class="divider"></app-divider>
+        <report-input-parameters :context-item.prop="contextItem" :report.prop="report"></report-input-parameters>
+        <report-validator-configurator :context-item.prop="contextItem" :report.prop="report"></report-validator-configurator>
+        <app-divider class="divider"></app-divider>
+        <report-query-configurator 
+          :context-item.prop="contextItem" 
+          :report.prop="report"
+          :need-dashboards-functional.prop="needDashboardsFunctional"
+        ></report-query-configurator>
+        <app-divider class="divider"></app-divider>
+        <report-preview-data :context-item.prop="contextItem" :report.prop="report"></report-preview-data>
+      </div>
+      <app-divider class="divider"></app-divider>
+      <div class="tabs">
+        <ul class="tabs_nav">
+          <li @click="activeTab = 'templates'" :class="{ active: activeTab === 'templates' }">
+            <material-icon icon="print"></material-icon> Печатные формы
+          </li>
+          <li v-if="needDashboardsFunctional" @click="activeTab = 'dashboards'" :class="{ active: activeTab === 'dashboards' }">
+            <material-icon icon="dashboard"></material-icon> Дашборды
+          </li>
+        </ul>
+        <div class="tabs_content">
+          <div class="tab" v-show="activeTab === 'templates'">
+            <report-templates :context-item.prop="contextItem" :report.prop="report" class="templates"></report-templates>
+            <app-divider class="divider"></app-divider>
+            <report-results-list title="Сформированные отчеты" :no-data-text.prop="'Сформированные отчеты не найдены'" results-type="report" :context-item.prop="contextItem" :report.prop="report" class="results" ref="results">
+            </report-results-list>
+          </div>
+          <div class="tab" v-show="activeTab === 'dashboards'">
+            <report-dashboards :context-item.prop="contextItem" :report.prop="report" class="dashboards"></report-dashboards>
+            <app-divider class="divider"></app-divider>
+            <report-results-list title="Снимки" :no-data-text.prop="'Снимки не найдены'" :results-type.prop="'dashboard'" :context-item.prop="contextItem" :report.prop="report" class="results" ref="results">
+            </report-results-list>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else>Нет данных для отображения</div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-info',
+      extends: 'common-service',
+      properties: {
+        DESIGNER_CLASS_ID: '1D6B0E90A501BB9',
+        CLASS_AS_REPORT_REPOSITORY_ID: '1D6B35F234F5347',
+        contextItem: Object,
+        report: Object,
+        _reportType: {
+          type: String,
+          get() {
+            return this._getTypeOfReport(this.report);
+          },
+        },
+        _deleting: false,
+        activeTab: 'templates',
+        needDashboardsFunctional: false
+      },
+      listeners: {
+        ['open-designer'](e) {
+          const params = e && e.detail && e.detail.value;
+          this._openDesignerFromContext(params);
+        },
+      },
+      async _remove() {
+        this._deleting = true;
+        if (confirm(`Вы уверены, что хотите удалить отчет "${this.report.name}"?`)) {
+          await this._removeReport(this.report);
+          this._deleting = false;
+        }
+      },
+      _openDesignerFromContext(params = {}) {
+        this._openDesigner({ ...params, context: this.report.fullId });
+      },
+    });
+  </script>
+</oda-module>

@@ -1,0 +1,47 @@
+<link href="../../common.html" rel="import">
+
+<link href="parameters/basic.html" rel="import">
+<link href="parameters/boolean.html" rel="import">
+<link href="parameters/datetime.html" rel="import">
+<link href="parameters/number.html" rel="import">
+<link href="parameters/string.html" rel="import">
+<link href="parameters/date.html" rel="import">
+
+<oda-module id="report-input-form-parameter-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+      }
+    </style>
+    <div v-if="parameter">
+      <div :context-item.prop="contextItem" :is="'report-input-form-parameter-' + parameter.type" :item.prop="item"
+           :items.prop="items" :dev-mode.prop="devMode"
+           :parameter.prop="parameter" :parameters.prop="parameters"></div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-list-item',
+      extends: 'common-service',
+      properties: {
+        item: {
+          type: Object,
+          watch(item) {
+            this.contextItem = item && item.contextItem || null;
+            this.parameter = item && item.parameter || null;
+            this.items = item && item.items || [];
+            this.parameters = item && item.parameters || [];
+            this.devMode = !!(item && item.devMode);
+          },
+        },
+        devMode: false,
+        contextItem: Object,
+        parameter: Object,
+        parameters: Array,
+        items: Array,
+      },
+    });
+  </script>
+</oda-module>

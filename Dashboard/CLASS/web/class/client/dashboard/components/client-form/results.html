@@ -1,0 +1,49 @@
+<link href="../info/results/results-list.html" rel="import">
+
+<oda-module id="reports-client-form-results">
+  <template>
+    <report-results-list
+        :title.prop="title"
+        :no-data-text.prop="noDataText"
+        :allow-download.prop="true"
+        :context-item.prop="contextItem"
+        :mark-author.prop="false"
+        :owners-of-reports.prop="owners"
+        :report.prop="report"
+        :show-filter-panel.prop="false"
+        :show-hints.prop="false"
+        :show-remove-button.prop="true"
+        :allow-open-source-data.prop="false"
+        :allow-open-object.prop="false"
+        :results-type.prop="resultsType"
+        ref="list"
+    ></report-results-list>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-client-form-results',
+      properties: {
+        contextItem: {
+          type: Object,
+          watch(item) {
+            if (!item) {
+              this.owners = [];
+            }
+            this.owners = [item.userId];
+          },
+        },
+        report: Object,
+        owners: [],
+        title: 'Результаты',
+        resultsType: '',
+        noDataText: 'Нет данных для отображения',
+
+      },
+      update() {
+        if (this.$refs.list) {
+          this.$refs.list.update();
+        }
+      },
+    });
+  </script>
+</oda-module>

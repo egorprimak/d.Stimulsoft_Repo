@@ -1,0 +1,298 @@
+<script src="/web/core/oda.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.reports.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.dashboards.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.viewer.js"></script>
+
+<script src="constants.js"></script>
+<script src="utils.js"></script>
+<script src="dom-utils.js"></script>
+<script src="context.js"></script>
+<script src="data-source-utils.js"></script>
+
+<style>
+  body {
+    display: block !important;
+    user-select: unset !important;
+  }
+  
+  #container {
+      height: 100%;
+  }
+
+</style>
+
+<script>
+  const container = document.createElement('div');
+  container.setAttribute('id', 'viewer');
+  container.textContent = getClientLang() === 'ru' ? 'Загрузка...' : 'Loading...';
+  Object.assign(container.style, {
+    height: '100vh',
+    display: 'flex',
+    placeContent: 'center',
+    placeItems: 'center',
+  });
+  document.body.append(container);
+</script>
+
+<script>
+    let hasButtonSave = false
+    const div = document.createElement('div');
+    document.body.append(div)
+
+  Stimulsoft.Base.StiLicense.key = LICENSE_KEY;
+
+  attachStylesheet(getResourcePath('stimulsoft.designer.office2013.whiteblue.css'));
+  attachStylesheet(getResourcePath('stimulsoft.viewer.office2013.whiteblue.css'));
+
+  if (getClientLang() === 'ru') {
+    Stimulsoft.Base.Localization.StiLocalization.addLocalizationFile(getResourcePath('localization/ru.xml'), false, 'ru');
+    Stimulsoft.Base.Localization.StiLocalization.cultureName = 'ru';
+  }
+
+  main();
+
+  function main() {
+    if (!ODANT.contextItem) {
+      setTimeout(main, 500);
+      return;
+    }
+    const inputParameters = Context.getInputParameters();
+    init(inputParameters).catch((err) => {
+      console.error(err);
+      const msg = err && err.message || 'Unknown error';
+      printError(msg);
+    });
+  }
+
+  async function init(input) {
+    const context = (!input.document && input.context
+      ? await getContextItem(input.context)
+      : !isFile(input.document) && getContextOf(input.document))
+      || null;
+    const templateId = !input.document && input.template || null;
+    const template = !input.document && templateId ? await getTemplateOfContext(templateId, context) : null;
+    const objects = !input.document && (Array.isArray(input.objects)
+      ? await getDataSet(context, input.objects)
+      : input.objects === '*' && await getDataSet(context))
+      || !isFile(input.document) && await getSourceDataOf(input.document);
+
+    const doc = input.document ? await getDocument(input.document) : null;
+
+    const options = {
+      context,
+      document: doc,
+      template,
+      templateId,
+      objects,
+    };
+
+    if (doc) {
+      getClassOfResults()
+        .then(cls => cls.getObject(input.document))
+        .then(item => {
+          if (ODANT.getBool(item.Root.isNew)) {
+            item.Root.isNew = false;
+            item.save();
+          }
+        })
+        .catch(() => {
+        });
+    }
+
+    const report = await createReport(options);
+
+    const stiOptions = new Stimulsoft.Viewer.StiViewerOptions();
+    stiOptions.appearance.scrollbarsMode = true;
+    stiOptions.height = '100%';
+
+    const viewer = new Stimulsoft.Viewer.StiViewer(stiOptions, 'StiViewer', false);
+    
+    const signField = input.fields?.filter(f => f.endsWith(input.template))?.[0]?.split(',')?.[0]
+
+    const setElementOnForm = (exportToObject) => {
+        setTimeout(() => {
+            const topBlock = [...document.getElementsByClassName('stiJsViewerToolBar')].filter(el=>el.style.display === 'block')?.[0]
+            const menu = topBlock?.querySelector('div.stiJsViewerStandartSmallButton').parentElement.parentElement
+            console.log('menu',menu)
+            menu?.append(exportToObject)
+        }, 1000)
+    }
+
+    const tempObjects = [];
+
+    if (input.hasOwnProperty('objects') && input.objects.length) {
+    	for (const oid of input.objects){
+        	const tempObject = await (await fetch(context.url + '/O:'+ oid)).json();
+        	tempObjects.push(...tempObject.$OBJECT);
+    	}
+    }
+
+    const newObjects = tempObjects.length > 0 ? tempObjects : objects
+
+        if (signField){
+            viewer.onShowReport = function(){
+                if (!hasButtonSave){
+                    const exportToObject = document.createElement('td');
+                    exportToObject.classList.add('stiJsViewerStandartSmallButton', 'stiJsViewerStandartSmallButtonDefault')
+
+
+                    console.log(newObjects[0], newObjects[0][signField], newObjects[0]['$'+signField])
+                    if (newObjects[0] && newObjects[0][signField] && newObjects[0]['$'+signField]){
+                        exportToObject.innerHTML = "Файл отчета уже прикреплен";
+                        setElementOnForm(exportToObject);
+                        return;
+                    }
+
+                    if (newObjects[0] && newObjects[0]['agreementStatus'] != 'Согласовано'){
+                        exportToObject.innerHTML = "Отчет еще не согласован";
+                        setElementOnForm(exportToObject);
+                        return;
+                    }
+
+
+                    exportToObject.innerHTML = "Сохранить в объект"
+                    setElementOnForm(exportToObject);
+                    hasButtonSave = true
+                    const mouseOver = () => {
+                        exportToObject.classList.add('stiJsViewerStandartSmallButtonOver')
+                        exportToObject.classList.remove('stiJsViewerStandartSmallButtonDefault')
+                    }
+                    exportToObject.addEventListener('mouseover', mouseOver)
+                    const mouseLeave = () => {
+                        exportToObject.classList.remove('stiJsViewerStandartSmallButtonOver')
+                        exportToObject.classList.add('stiJsViewerStandartSmallButtonDefault')
+                    }
+                    exportToObject.addEventListener('mouseleave', mouseLeave)
+                    const mouseClick = () => {
+                        exportToObject.disabled = true
+                        exportToObject.innerHTML = 'Обождите...'
+                        report.exportDocumentAsync( async (pdfData) => {
+                            const blob = new Blob([(new Uint8Array(pdfData)).buffer], {type: 'text/plain'});
+                            const fileName = report.reportAlias+'_'+input.template;
+                            const formData = new FormData();
+                            formData.append('file', blob, fileName + '.pdf');
+                
+                            await fetch(`${context.url}/O:${objects[0].oid}/${fileName}.pdf`, {
+                                        method: "POST",
+                                        headers: {
+                                            "Content-Type": "multipart/form-data"
+                                        },
+                                        body: formData
+                            })
+                            
+                            context.getObject(input.objects[0]).then(async o => {
+                                o.Root[signField] = 'Отчет' + '.pdf'
+                                if (!o.Root['$'+signField]) o.Root['$'+signField] = []
+                                if (!o.Root['$'+signField][0]) o.Root['$'+signField].push({})
+                                o.Root['$'+signField][0].file = 'Отчет' + '.pdf'
+                                if (!o.Root['$'+signField][0].$file) o.Root['$'+signField][0].$file = []
+                                if (!o.Root['$'+signField][0].$file[0]) o.Root['$'+signField][0].$file.push({})
+                                o.Root['$'+signField][0].$file[0].link = fileName + '.pdf'
+                                await o.save()
+                                window.close()
+    
+                            })
+                    
+                            //Stimulsoft.System.StiObject.saveAs(pdfData, fileName + ".pdf", "application/pdf");
+                            exportToObject.removeEventListener('click', mouseClick)
+                            exportToObject.removeEventListener('mouseleave', mouseLeave)
+                            exportToObject.removeEventListener('mouseover', mouseOver)
+                            
+                        }, Stimulsoft.Report.StiExportFormat.Pdf);
+                    }
+                    exportToObject.addEventListener('click', mouseClick)
+                }
+            }
+        }
+
+    viewer.report = report;
+    
+    //viewer.renderHtml('viewer');
+    viewer.renderHtml(document.body)
+  }
+
+  async function createReport({ context, template, objects, document }) {
+    const report = new Stimulsoft.Report.StiReport();
+
+    if (document) {
+      report.loadDocument(document);
+    } else if (template) {
+      report.load(template);
+    }
+
+    if (context && objects) {
+      const dataSet = new Stimulsoft.System.Data.DataSet(context.name);
+      dataSet.readJson(JSON.stringify({ $OBJECT: objects }));
+      report.regData(context.name, null, dataSet);
+    }
+
+    return report;
+  }
+
+  async function getDataSet(context, oids) {
+    const index = await context.getIndex('Pack');
+    const quote = v => `"${v}"`;
+    const xq = oids ? `PACK/OBJECT[@oid=(${oids.map(quote).join(',')})]` : 'PACK/OBJECT';
+    const queryResult = await index.XQuery(xq);
+    return queryResult && Array.isArray(queryResult.$OBJECT) && queryResult.$OBJECT || [];
+  }
+
+  async function getDocument(id) {
+    const safeId = String(id);
+    if (isFile(safeId)) {
+      const hash = Math.round(Math.random() * 1e15).toString(16);
+      return await fetch(`/api${safeId}?h=${hash}`).then(res => res.json());
+    }
+    return await getDocumentFromResultObject(safeId);
+  }
+
+  async function getDocumentFromResultObject(id) {
+    try {
+      const repository = await getClassOfResults();
+      const fileField = await getFieldOfClass('result', repository);
+      const object = await repository.getObject(id);
+      const file = await fileField.getValue(object, object.Root);
+      const hash = Math.round(Math.random() * 1e15).toString(16);
+      const filePath = `/api${file.fullId}?h=${hash}`;
+      return fetch(filePath).then(res => res.json());
+    } catch {
+      return null;
+    }
+  }
+
+  async function getSourceDataOf(id) {
+    try {
+      const repository = await getClassOfResults();
+      const fileField = await getFieldOfClass('source', repository);
+      const object = await repository.getObject(id);
+      const file = await fileField.getValue(object, object.Root);
+      const hash = Math.round(Math.random() * 1e15).toString(16);
+      const filePath = `/api${file.fullId}?h=${hash}`;
+      return fetch(filePath)
+        .then(res => res.json())
+        .then(res => res.$OBJECT);
+    } catch {
+      return null;
+    }
+  }
+
+  async function getContextOf(id) {
+    try {
+      const repository = await getClassOfResults();
+      const fileField = await getFieldOfClass('targetClass', repository);
+      const object = await repository.getObject(id);
+      return await fileField.getValue(object, object.Root);
+    } catch {
+      return null;
+    }
+  }
+
+  function isFile(str) {
+    const safeStr = String(str).toLowerCase();
+    return safeStr.endsWith('.mdc') || safeStr.endsWith('.json');
+  }
+
+  function getResourcePath(relativePath) {
+    return `${RESOURCES_PATH}/${String(relativePath).replace(/^\//, '')}`;
+  }
+</script>

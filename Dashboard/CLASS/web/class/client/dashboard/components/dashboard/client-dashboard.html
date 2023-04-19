@@ -1,0 +1,194 @@
+<link href="../client-form/client-form.html" rel="import">
+
+<oda-module id="reports-client-dashboard">
+  <template>
+    <style>
+      :host {
+        display: block;
+        height: 100%;
+        background-color: #fff;
+        color: #555;
+        font-size: 16px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .layout {
+        display: flex;
+        height: 100%;
+        justify-items: stretch;
+      }
+
+      .content {
+        flex: 1;
+        padding: 0 15px;
+        overflow: auto;
+        position: relative;
+      }
+
+      .centered,
+      .error {
+        height: 100%;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .error {
+        color: red;
+      }
+    </style>
+    <div class="layout" v-if="ready && !error">
+      <dashboard-left-panel :admin-mode.prop="adminMode" :context-item.prop="contextItem"
+                            :reports.prop="groupedReportsList"
+                            @created-report="_addReport($event.detail.value)"
+                            @open-designer="_openDesigner()" @remove-report="removeReport($event.detail.value)"
+                            @select-report="selectedReport = $event.detail.value" @selection-change="_onSelectionChange($event)"
+                            @update-reports-list="_loadData()"></dashboard-left-panel>
+      <div class="content">
+        <reports-client-form 
+          :context-item.prop="contextItem" 
+          :report.prop="selectedReport" 
+          :need-dashboards-functional.prop="needDashboardsFunctional"
+          @remove-report="removeReport($event.detail.value)"
+          v-if="selectedReport"
+        ></reports-client-form>
+        <p v-else>Выберите отчет</p>
+      </div>
+    </div>
+    <div class="error" v-if="ready && error">
+      <p>Error: {{ error && error.message || 'Unknown error' }}</p>
+    </div>
+    <div class="centered" v-if="!ready">
+      <loading-spinner size="80"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-client-dashboard',
+      extends: 'reports-dashboard',
+      properties: {
+        ready: false,
+        error: null,
+        contextItem: Object,
+        reports: {
+          type: Array,
+          default: [],
+        },
+        groupedReportsList: {
+          type: Array,
+          default: [],
+        },
+        needDashboardsFunctional: false,
+        selectedReport: Object,
+        REPORTS_GROUP_LABEL: 'Отчеты',
+        adminMode: false,
+      },
+      observers: [
+        async function contextItemChanged(contextItem) {
+          await this._initComponent();
+        },
+        async function reportsChange(ready, reports) {
+          if (!ready) {
+            return;
+          }
+
+          const makeGroup = (label, items, type, { group = {}, template = {} } = {}) => {
+            return {
+              label,
+              items: Array.isArray(items) ? items.map(i => wrap(i, type, template)) : [],
+              groupTemplate: `reports-${type}-group-item`,
+              ...group,
+            };
+          };
+
+          const wrap = (item, type, params = {}) => {
+            return {
+              label: item.label,
+              selected: this._isSelectedReport(item),
+              item,
+              itemTemplate: `reports-${type}-item-list`,
+              type,
+              adminMode: this.adminMode,
+              ...params,
+            };
+          };
+
+          const { contextItem } = this;
+
+          this.groupedReportsList = [
+            makeGroup(this.REPORTS_GROUP_LABEL, reports, 'report', {
+              group: {
+                noDataText: 'Отчеты не найдены',
+                contextItem,
+              },
+              template: {
+                contextItem,
+              },
+            }),
+          ];
+        },
+      ],
+      listeners: {
+        ['remove-report-from-list'](e) {
+          const report = e && e.detail && e.detail.value;
+          this.removeReportFromList(report);
+        },
+      },
+      removeReportFromList(report) {
+        if (report) {
+          this._removeItemFromList(this.reports, report);
+        }
+      },
+      _removeItemFromList(list, item) {
+        if (!item) {
+          return;
+        }
+        const idx = list.findIndex(r => r.id === item.id);
+        if (this._isSelectedReport(item)) {
+          this.selectedReport = null;
+        }
+        if (idx !== -1) {
+          list.splice(idx, 1);
+        }
+      },
+      _isSelectedReport(report) {
+        const selectedReportId = this.selectedReport && this.selectedReport.id;
+        return !!report && report.id === selectedReportId;
+      },
+      async _initComponent() {
+        this.ready = false;
+        this.error = null;
+        this._reset();
+        try {
+          await this._loadData();
+        } catch (err) {
+          this.error = err;
+        }
+        this.ready = true;
+      },
+      _reset() {
+        this.reports = [];
+      },
+      async _loadData() {
+        if (!this.contextItem) {
+          throw Error('Context not defined');
+        }
+
+        this.reports = await this._getReports({ checkAccess: true });
+      },
+      _onSelectionChange(event) {
+        const selection = event.detail.value;
+        this.selectedReport = Array.isArray(selection)
+          && selection[0]
+          && Array.isArray(selection[0].items)
+          && selection[0].items[0]
+          && selection[0].items[0].item
+          || null;
+      },
+      _addReport(report) {
+        this.reports.push(report);
+      },
+    });
+  </script>
+</oda-module>

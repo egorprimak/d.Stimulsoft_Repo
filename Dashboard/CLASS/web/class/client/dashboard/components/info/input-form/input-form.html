@@ -1,0 +1,171 @@
+<link href="../../common.html" rel="import">
+<link href="../../../../lib/divider.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+
+<link href="parameters.html" rel="import">
+
+<oda-module id="report-input-form">
+  <template>
+    <style>
+      :host {
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+      }
+
+      .messages {
+      }
+
+      .msg {
+        margin: 10px;
+      }
+
+      .msg material-icon {
+        position: relative;
+        top: 3px;
+      }
+
+      .warn {
+        color: #e29300;
+      }
+
+      .error {
+        color: #d9534f;
+      }
+    </style>
+    <report-input-form-parameters
+        :dev-mode.prop="devMode"
+        ::ready.prop="ready"
+        :context-item.prop="contextItem"
+        :report.prop="report"
+        ref="list"
+        @change="_onChange"
+    ></report-input-form-parameters>
+    <div v-if="isMessagesExists">
+      <app-divider></app-divider>
+      <div class="messages">
+        <div class="msg warn" v-for="warn of warnings">
+          <material-icon icon="warning" size="16"></material-icon>
+          {{warn}}
+        </div>
+        <div class="msg error" v-for="err of errors">
+          <material-icon icon="error" size="16"></material-icon>
+          {{err}}
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form',
+      extends: 'common-service',
+      properties: {
+        devMode: false,
+        contextItem: Object,
+        report: Object,
+        ready: {
+          type: Boolean,
+          default: false,
+          notify: true,
+        },
+        _validateTimer: {
+          type: Number,
+          value: null,
+        },
+        _applyValidationId: {
+          type: Number,
+          value: null,
+        },
+        warnings: Array,
+        errors: Array,
+        validating: false,
+        isMessagesExists: {
+          type: Boolean,
+          get() {
+            return this.warnings && this.warnings.length > 0
+              || this.errors && this.errors.length > 0;
+          },
+        },
+      },
+      async getStructure() {
+        return this.report && await this.report.$STATIC.$object || null;
+      },
+      getItemsValues() {
+        const data = this.$refs && this.$refs.list && { ...this.$refs.list.getItemsValues() } || {};
+        return Object.fromEntries(Object.entries(data).map(([k, v]) => {
+          if (Array.isArray(v)) {
+            return [k, Object.fromEntries(v.map(i => [i.key, i.value]))];
+          }
+          return [k, String(v)];
+        }));
+      },
+      _onChange() {
+        if (!!this._validateTimer) {
+          clearTimeout(this._validateTimer);
+        }
+        this.validating = true;
+        const timerId = setTimeout(() => {
+          this._applyValidationId = timerId;
+          this._validate(timerId)
+            .finally(() => {
+              if (this._applyValidationId === timerId) {
+                this.validating = false;
+              }
+            });
+          this._validateTimer = null;
+        }, 300);
+        this._validateTimer = timerId;
+      },
+      async _validate(id) {
+        const { $base } = this.contextItem;
+        const data = this.getItemsValues();
+        const structure = await this.getStructure();
+        const sourceQuery = structure.Root.validatorQuery || '';
+
+        if (String(sourceQuery).trim().length === 0) {
+          this.warnings = [];
+          this.errors = [];
+          return;
+        }
+
+        const querySourcePath = !!structure.Root.validatorQuerySource
+          ? String(structure.Root.validatorQuerySource).trim()
+          : '';
+
+        const source = !!querySourcePath ? await $base.findItem(querySourcePath) : this.report;
+
+        if (this._applyValidationId !== id) {
+          return;
+        }
+
+        if (!source) {
+          this.warnings = [];
+          this.errors = ['Системная ошибка'];
+          return;
+        }
+
+        const query = this._prepareQuery(sourceQuery, data, this.report);
+        const result = await source.XQuery(query);
+
+        if (this._applyValidationId !== id) {
+          return;
+        }
+
+        if (result === null) {
+          this.warnings = [];
+          this.errors = ['Системная ошибка'];
+          return;
+        }
+
+        const getContent = msgs => msgs && msgs.map(m => m.$TEXT$ && m.$TEXT$.join('') || '') || [];
+
+        const messages = result && result.$messages && result.$messages[0];
+        const warnings = messages && getContent(messages.$warn);
+        const errors = messages && getContent(messages.$error);
+
+        this.warnings = warnings;
+        this.errors = errors;
+      },
+    });
+  </script>
+</oda-module>

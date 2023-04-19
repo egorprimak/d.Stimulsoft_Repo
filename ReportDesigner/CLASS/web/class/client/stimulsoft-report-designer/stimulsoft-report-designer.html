@@ -1,0 +1,126 @@
+<script src="/web/core/oda.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.reports.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.dashboards.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.viewer.js"></script>
+<script src="../../../../../C:1D6EE3EE7BFC08A/web/lib/stimulsoft/stimulsoft.designer.js"></script>
+
+<script src="utils.js"></script>
+<script src="dom-utils.js"></script>
+
+<script>
+  const container = document.createElement('div');
+  container.setAttribute('id', 'designer');
+  container.textContent = getClientLang() === 'ru' ? 'Загрузка...' : 'Loading...';
+  Object.assign(container.style, {
+    height: '100vh',
+    display: 'flex',
+    placeContent: 'center',
+    placeItems: 'center',
+  });
+  document.body.append(container);
+</script>
+
+<script src="data-source-utils.js"></script>
+<script src="type-converter.js"></script>
+
+<script src="savers/file-report-saver.js"></script>
+<script src="savers/oda-report-saver.js"></script>
+
+<script src="designer-builder.js"></script>
+<script src="oda-designer-builder.js"></script>
+
+<script src="constants.js"></script>
+<script src="context.js"></script>
+<script src="configuration.js"></script>
+<script src="application.js"></script>
+
+<script>
+  const configuration = new Configuration({
+    resourcePath: RESOURCES_PATH,
+    licenseKey: LICENSE_KEY,
+    defaultLanguage: getClientLang(),
+    stimulsoft: Stimulsoft,
+    languages: ['en', 'ru'],
+  });
+  configuration.apply();
+
+  main();
+
+  function main() {
+    if (!ODANT.contextItem) {
+      setTimeout(main, 500);
+      return;
+    }
+    const inputParameters = Context.getInputParameters();
+    init(inputParameters).catch((err) => {
+      console.error(err);
+      const msg = err && err.message || 'Unknown error';
+      printError(msg);
+    });
+  }
+
+  async function init(input) {
+    const context = input.context ? await getContextItem(input.context) : null;
+    const templateId = input.template || null;
+    const template = templateId ? await getTemplateOfContext(templateId, context) : null;
+    const type = String(input.type).toLowerCase() === 'dashboard' ? 'dashboard' : 'report';
+
+    const options = {
+      context,
+      template,
+      templateId,
+      type,
+    };
+
+    const designer = await createDesigner(options);
+    const saver = await createSaver(options);
+
+    designer.onSaveReport = ({ report }) => {
+      saver.save(report);
+    };
+
+    designer.renderHtml('designer');
+  }
+
+  async function createDesigner({ context, template, type } = {}) {
+    const options = {
+      appearance: {
+        fullScreenMode: true,
+        showSaveDialog: false,
+      },
+    };
+
+    let builder;
+    if (context) {
+      const index = await context.getIndex('Pack');
+      const queryResult = await index.XQuery(isReport(context) ? '/PACK/OBJECT' : `subsequence(/PACK/OBJECT, 0, 100)`);
+      const dataSet = queryResult && queryResult.$OBJECT || [];
+      const attributes = await getAttributesOf(context);
+      builder = new OdaDesignerBuilder();
+      builder.setContext(context);
+      builder.setAttributes(attributes);
+      builder.setPreviewData(dataSet);
+    } else {
+      builder = new DesignerBuilder();
+    }
+
+    if (template) {
+      builder.setTemplate(template);
+    }
+
+    builder.setOptions(options);
+    return type === 'report'
+      ? builder.buildReportDesigner()
+      : builder.buildDashboardDesigner();
+  }
+
+  async function createSaver({ context, templateId, type } = {}) {
+    if (context) {
+      const templateObject = await getObjectOfTemplateForContext(templateId, context);
+      return new OdaReportSaver(context, templateObject, type);
+    }
+
+    return new FileReportSaver();
+  }
+
+</script>

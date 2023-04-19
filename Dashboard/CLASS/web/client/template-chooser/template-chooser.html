@@ -1,0 +1,74 @@
+<link href="../../../~/client/lib/list.html" rel="import">
+<link href="../../../~/client/lib/button.html" rel="import">
+<link href="template-chooser-item.html" rel="import">
+
+<oda-module id="sti-template-chooser">
+  <template>
+    <style>
+      :host {
+        display: block;
+        min-width: 500px;
+        max-width: 100%;
+      }
+
+      p {
+        padding: 10px;
+        margin: 0;
+      }
+
+      .layout {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        border-radius: 0;
+      }
+
+      .list {
+        flex: 1;
+        max-height: 80vh;
+      }
+    </style>
+    <div class="layout">
+      <app-list
+          :items.prop="templates"
+          @select-template="selectTemplate($event.detail.value)"
+          class="list"
+          item-template="sti-template-chooser-item"
+          v-if="templates && templates.length > 0"
+      ></app-list>
+      <p v-else>{{ noDataText }}</p>
+      <app-button @click="selectTemplate(null)" class="btn" type="default" v-if="showBlankTemplateButton">
+        {{ blankTemplateButtonText }}
+      </app-button>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'sti-template-chooser',
+      properties: {
+        templates: Array,
+        showBlankTemplateButton: false,
+        blankTemplateButtonText: 'Открыть без шаблона',
+        selectedTemplate: null,
+        noDataText: 'Нет данных для отображения',
+      },
+      attached() {
+        const domHost = this.domHost;
+        domHost.title = 'Выберите шаблон';
+        domHost.buttons = ['Cancel'];
+
+        setTimeout(() => {
+          domHost.leftButtons = [];
+          domHost.rightButtons = [];
+        }, 100);
+      },
+      selectTemplate(template) {
+        this.selectedTemplate = template;
+        this.domHost.close();
+      },
+    });
+  </script>
+</oda-module>

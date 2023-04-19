@@ -1,0 +1,33 @@
+<link href="../../../lib/list.html" rel="import">
+
+<link href="class-group-item.html" rel="import">
+<link href="class-item-list.html" rel="import">
+<link href="report-group-item.html" rel="import">
+<link href="report-item-list.html" rel="import">
+
+<oda-module id="reports-list">
+  <template>
+    <style>
+      :host {
+        display: block;
+        height: 100%;
+        overflow: hidden;
+      }
+    </style>
+    <app-list
+        :items.prop="reports"
+        grouped
+        selection-mode="single"
+    ></app-list>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-list',
+      properties: {
+        reports: [],
+        adminMode: false,
+      },
+    });
+  </script>
+</oda-module>
+

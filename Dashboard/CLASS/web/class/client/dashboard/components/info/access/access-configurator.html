@@ -1,0 +1,257 @@
+<link href="../../../../lib/button.html" rel="import">
+<link href="../../../../lib/divider.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="access-editor.html" rel="import">
+
+<oda-module id="report-access-configurator">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 0 10px 0;
+        border-radius: 3px;
+      }
+
+      .title {
+        padding: 3px 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        align-items: center;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item, .actions + .actions {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .test-actions {
+        border-radius: 50px;
+        border: 1px dashed #8d8d8d;
+        background-color: #f3f3f3;
+      }
+
+      .content-container {
+        padding-bottom: 10px;
+      }
+
+      .visible-controller {
+        margin-right: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #8d8d8d;
+        border-radius: 100%;
+        overflow: hidden;
+      }
+    </style>
+    <header class="panel">
+      <div class="visible-controller">
+        <action-btn v-if="_expanded">
+          <material-icon icon="expand_less" @click="_expanded = false"></material-icon>
+        </action-btn>
+        <action-btn v-if="!_expanded">
+          <material-icon icon="expand_more" @click="_expanded = true"></material-icon>
+        </action-btn>
+      </div>
+      <h4 class="title">Контроллер доступа{{_edited ? '*' : ''}}</h4>
+      <div class="spacer"></div>
+      <div v-show="!_expanded">
+        {{ _isQueryEmpty ? 'Не определен' : 'Определен' }}
+      </div>
+      <div class="actions" v-show="_expanded">
+        <action-btn class="item" v-if="_edited && !_saving">
+          <material-icon @click="reset()" icon="undo" title="Отменить изменения"></material-icon>
+        </action-btn>
+        <action-btn class="item" v-if="_edited && !_saving">
+          <material-icon @click="save()" icon="save" title="Сохранить"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else-if="_edited">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+      <div class="actions test-actions" v-if="!_isQueryEmpty" v-show="_expanded">
+        <action-btn class="item">
+          <material-icon @click="test()" icon="play_circle_outline" title="Запустить запрос"></material-icon>
+        </action-btn>
+        <action-btn class="item" ref="testOptions">
+          <material-icon @click="showTestOptions = !showTestOptions" icon="settings"
+                         title="Параметры запуска"></material-icon>
+        </action-btn>
+      </div>
+      <app-dropdown :target.prop="$refs.testOptions" :visible.prop="showTestOptions" :min-width.prop="300">
+        <div style="padding: 10px;">
+          <div style="font-size: 12px; white-space: nowrap">
+            <table style="border-spacing: 0; border: 0;">
+              <tr>
+                <td>
+                  <label for="testUserId">[%user_id%]=</label>
+                </td>
+                <td>
+                  <input id="testUserId" type="text" v-model="testUserId">
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </app-dropdown>
+    </header>
+    <div v-show="_expanded" class="content-container">
+      <div v-if="report">
+        <access-editor
+            :report.prop="report"
+            @query-edited="onQueryEdited($event.detail.value)"
+            @query-source-edited="onQuerySourceEdited($event.detail.value)"
+            ref="editor"
+        ></access-editor>
+        <ul class="hints">
+          <li>Использование переменных-параметров ([#param#]) в данном запросе невозможно!</li>
+          <li>Если запрос контроллера не определен, то доступ к отчету открыт для всех</li>
+          <li>Результатом запроса должно быть логическое значение (true/false)</li>
+          <li>Любой отличный от логического значения ответ будет воспринят как false</li>
+        </ul>
+      </div>
+      <p v-else>Нет данных для отображения</p>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-access-configurator',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        query: '',
+        querySource: '',
+        showTestOptions: false,
+        testUserId: '',
+        _expanded: {
+          value: false,
+          watch(v) {
+            if (v) {
+              setTimeout(() => {
+                this.$refs.editor && this.$refs.editor.refresh();
+              }, 50);
+            }
+          },
+        },
+        _edited: false,
+        _saving: false,
+        _isQueryEmpty: {
+          type: Boolean,
+          get() {
+            return !this.query || String(this.query).trim().length === 0;
+          },
+        },
+        _instructionVisible: false,
+      },
+      async onQueryEdited(query) {
+        this.query = query;
+        this._edited = await this._isEdited();
+      },
+      async onQuerySourceEdited(querySource) {
+        this.querySource = querySource;
+        this._edited = await this._isEdited();
+      },
+      async getStructure() {
+        return this.report && await this.report.$STATIC.$object || null;
+      },
+      save() {
+        this._saving = true;
+        const { query, querySource } = this;
+        this.getStructure().then(async (structure) => {
+          Object.assign(structure.Root, {
+            accessQuery: query,
+            accessQuerySource: querySource,
+          });
+          await structure.save();
+          this._saving = false;
+          this._edited = await this._isEdited();
+        });
+      },
+      async test() {
+        const { $base } = this.contextItem;
+        const sourceQuery = this.query || '';
+
+        if (String(sourceQuery).trim().length === 0) {
+          alert('Текст запроса отсуствует');
+          return;
+        }
+
+        const querySourcePath = !!this.querySource ? String(this.querySource).trim() : '';
+        const source = !!querySourcePath ? await $base.findItem(querySourcePath) : this.report;
+
+        if (!source) {
+          alert('Источник запроса не найден');
+          return;
+        }
+
+        const query = this._prepareQuery(sourceQuery, {}, this.report, {
+          user_id: this.testUserId || this.contextItem.userId,
+        });
+
+        try {
+          const result = await this._xquery(source, query, 'xml');
+          this._showXML(result).then();
+        } catch (err) {
+          this._showError(err, 'Ошибка выполнения запроса').then();
+        }
+      },
+      preview() {
+        this._getInputParametersForReport(this.report, true);
+      },
+      async reset() {
+        if (confirm('Отменить изменения?')) {
+          this.$refs.editor && this.$refs.editor.reset();
+          this._edited = await this._isEdited();
+        }
+      },
+      async _isEdited() {
+        const structure = await this.getStructure();
+        const queryEdited = this.query !== structure.Root.accessQuery;
+        const querySourceEdited = this.querySource !== structure.Root.accessQuerySource;
+        return queryEdited || querySourceEdited;
+      },
+      _toggleInstruction() {
+        this._instructionVisible = !this._instructionVisible;
+      },
+    });
+  </script>
+</oda-module>
+

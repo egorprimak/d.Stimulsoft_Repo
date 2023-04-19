@@ -1,0 +1,342 @@
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="results-list-item.html" rel="import">
+<link href="results-list-group-item.html" rel="import">
+
+<oda-module id="report-results-list">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+    </style>
+    <div class="panel">
+      <h4 class="title">{{title}} <span class="count" v-if="count > 0">[{{count}}]</span></h4>
+      <div class="actions">
+        <app-button :styling-mode.prop="'text'" @click="toggleOnlyNew()" class="item" v-if="showFilterPanel"
+                    v-show="onlyNew && !_updating">
+          Только новые
+        </app-button>
+        <app-button :styling-mode.prop="'text'" @click="toggleOnlyNew()" class="item" v-if="showFilterPanel"
+                    v-show="!onlyNew && !_updating">
+          Все
+        </app-button>
+        <app-button :styling-mode.prop="'text'" @click="toggleFirstNew()" class="item" v-if="showFilterPanel"
+                    v-show="!onlyNew && firstNew && !_updating">
+          Сначала новые
+        </app-button>
+        <app-button :styling-mode.prop="'text'" @click="toggleFirstNew()" class="item" v-if="showFilterPanel"
+                    v-show="!onlyNew && !firstNew && !_updating">
+          По очереди
+        </app-button>
+        <app-button :styling-mode.prop="'text'" @click="toggleOnlyMy()" class="item" v-if="showFilterPanel"
+                    v-show="isOnlyMy() && !_updating">
+          Только мои
+        </app-button>
+        <app-button :styling-mode.prop="'text'" @click="toggleOnlyMy()" class="item" v-if="showFilterPanel"
+                    v-show="!isOnlyMy() && !_updating">
+          Всех пользователей
+        </app-button>
+        <action-btn @click="update()" class="item" title="Обновить" v-if="!_deleting && !_updating">
+          <material-icon icon="update"></material-icon>
+        </action-btn>
+        <div class="loader item" v-if="!_deleting && _updating">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="removeAll()" active-color="red" class="item" title="Удалить все"
+                    v-if="showRemoveButton && !_deleting">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else-if="showRemoveButton">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </div>
+    <div class="layout" v-if="report">
+      <div class="layout" v-if="ready">
+        <app-list :focused-state-enabled.prop="false" :hover-state-enabled.prop="true" :items.prop="_results"
+                  @remove-result="removeResultFromList($event.detail.value)"
+                  :item-template="_resultItemTemplate" :no-data-text.prop="noDataText"
+                  ref="list"></app-list>
+        <ul class="hints" v-if="showHints && $refs.list && !$refs.list.noItems">
+          <li>Двойной клик для открытия</li>
+          <li>Синим цветом отмечены ваши отчеты</li>
+        </ul>
+      </div>
+      <div v-else>
+        <loading-spinner size="40"></loading-spinner>
+      </div>
+    </div>
+    <p v-else>Нет данных для отображения</p>
+  </template>
+  <script>
+    ODA({
+      is: 'report-results-list',
+      extends: 'common-service',
+      properties: {
+        contextItem: {
+          type: Object,
+          watch() {
+            this._subscribe();
+          },
+        },
+        report: Object,
+        results: Array,
+        count: {
+          type: Number,
+          get() {
+            return Array.isArray(this.results) ? this.results.length : 0;
+          },
+        },
+        ready: {
+          type: Boolean,
+          default: false,
+          notify: true,
+        },
+        _updating: false,
+        _deleting: false,
+        _resultsCls: Object,
+        _resultsClsChangedHandler: Function,
+        ownersOfReports: [],
+        onlyNew: false,
+        firstNew: false,
+        showFilterPanel: true,
+        showRemoveButton: true,
+        markAuthor: true,
+        showHints: true,
+        allowDownload: true,
+        allowOpenSourceData: true,
+        allowOpenObject: true,
+        title: 'Сформированные отчеты',
+        resultsType: 'report',
+        noDataText: 'Нет данных для отображения',
+
+        _resultItemTemplate: 'report-results-list-item',
+        _groupItemTemplate: 'report-results-list-group-item',
+      },
+      observers: [
+        function onSourceChanged(contextItem, report, ownersOfReports, resultsType) {
+          this.ready = false;
+          this.results = [];
+          this._loadData().finally(() => {
+            this.ready = true;
+          });
+        },
+        function updateResultsList(results, onlyNew, firstNew) {
+          this._updateResultList();
+        },
+      ],
+      async _subscribe() {
+        this._unsubscribe();
+        if (!this.contextItem) {
+          return;
+        }
+        this._resultsCls = await this._getResultsClass();
+        this._resultsClsChangedHandler = () => this._loadData();
+        this._resultsCls.listen('changed', this._resultsClsChangedHandler);
+      },
+      _unsubscribe() {
+        if (this._resultsCls && this._resultsClsChangedHandler) {
+          this._resultsCls.unlisten('changed', this._resultsClsChangedHandler);
+        }
+      },
+      detached() {
+        this._unsubscribe();
+      },
+      isOnlyMy() {
+        if (!Array.isArray(this.ownersOfReports) || this.ownersOfReports.length === 0 || this.ownersOfReports.length > 1) {
+          return false;
+        }
+        return this.ownersOfReports[0] === this.contextItem.userId;
+      },
+      async _loadData() {
+        if (this.report && this.contextItem) {
+          const parameters = {
+            owners: Array.isArray(this.ownersOfReports) ? this.ownersOfReports.slice() : [],
+          };
+          return await this._getResultsOrReport(this.report.id, parameters, this.resultsType)
+            .then((results) => {
+              this.results = this._prepareResults(results);
+            });
+        }
+      },
+      update() {
+        this._updating = true;
+        return this._loadData().finally(() => {
+          this._updating = false;
+        });
+      },
+      removeAll() {
+        const confirmMsg = 'Вы уверены, что хотите удалить все сгенерированые отчеты?\n' +
+          'Отменить данное действие будет невозможно!';
+        if (!confirm(confirmMsg)) {
+          return;
+        }
+        this._deleting = true;
+        const ids = this.results && this.results.map(r => r.results ? r.results.map(i => i.result.oid) : r.result.oid).flat() || [];
+        this._removeResults(ids).finally(() => {
+          this.results = [];
+          this._deleting = false;
+        });
+      },
+      removeResultFromList(result) {
+        if (!Array.isArray(this.results)) {
+          return;
+        }
+        const idx = this.results.indexOf(result);
+        if (idx !== -1) {
+          this.results.splice(idx, 1);
+        }
+      },
+      toggleOnlyNew() {
+        this.onlyNew = !this.onlyNew;
+        this.render();
+      },
+      toggleFirstNew() {
+        this.firstNew = !this.firstNew;
+        this.render();
+      },
+      toggleOnlyMy() {
+        if (this.isOnlyMy()) {
+          this.ownersOfReports = this._saved_ownersOfReports && this._saved_ownersOfReports.slice() || [];
+        } else {
+          this._saved_ownersOfReports = this.ownersOfReports.slice();
+          this.ownersOfReports = [this.contextItem.userId];
+        }
+      },
+
+      _prepareResults(results) {
+        const {
+          contextItem,
+          _resultItemTemplate,
+          _groupItemTemplate,
+        } = this;
+
+        const groups = new Map();
+        const add = (r) => {
+          if (!groups.has(r.group)) {
+            groups.set(r.group, [r]);
+          } else {
+            groups.get(r.group).push(r);
+          }
+        };
+
+        for (const r of results) {
+          add(r);
+        }
+
+        const sortByDate = (a, b) => new Date(b.date).valueOf() - new Date(a.date).valueOf();
+
+        const prepareResult = result => ({
+          label: result.name || '...',
+          result,
+          date: result.resultDate || result.date,
+          contextItem,
+          list: this,
+          itemTemplate: _resultItemTemplate,
+        });
+        const prepareAll = rs => rs.map(r => prepareResult(r));
+        const prepareGroup = (group, rs) => ({
+          key: group,
+          label: rs[0].groupLabel || 'unknown',
+          date: rs[0].groupDate,
+          results: prepareAll(rs).sort(sortByDate),
+          userId: rs[0].userId,
+          contextItem,
+          list: this,
+          itemTemplate: _groupItemTemplate,
+        });
+
+        return Array.from(groups.entries()).map(([group, items]) => {
+          if (group !== undefined) {
+            return prepareGroup(group, items);
+          } else {
+            return prepareAll(items);
+          }
+        }).flat().sort(sortByDate);
+      },
+
+      _updateResultList() {
+        if (!Array.isArray(this.results)) {
+          this._results = [];
+          return;
+        }
+
+        let results = this.results.slice();
+
+        const isNew = i => !!(i && i.result && ODANT.getBool(i.result.isNew));
+
+        if (this.onlyNew) {
+          results = results.filter(isNew);
+        } else if (this.firstNew) {
+          const isNewNum = i => isNew(i) ? 1 : 0;
+          results.sort((r1, r2) => isNewNum(r2) - isNewNum(r1));
+        }
+
+        this._results = results;
+      },
+    });
+  </script>
+</oda-module>

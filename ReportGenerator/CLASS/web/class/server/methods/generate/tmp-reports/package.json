@@ -1,0 +1,8 @@
+{
+  "name": "tmp-reports",
+  "version": "1.0.0",
+  "dependencies": {
+    "stimulsoft-dashboards-js": "^2023.1.1",
+    "stimulsoft-reports-js": "^2023.1.1"
+  }
+}

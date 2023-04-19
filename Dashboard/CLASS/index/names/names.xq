@@ -1,0 +1,2 @@
+<?xml version="1.0"?>
+<XQUERY><![CDATA[element X { for $a in //PACK/OBJECT let $nm := $a/(if (@name != '') then @name else ()) order by $nm return element V {attribute name {$nm }, $a/(@oid,@cid,@parent),  $a/parent}}]]></XQUERY>

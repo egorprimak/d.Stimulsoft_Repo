@@ -1,0 +1,87 @@
+<link href="../../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../../lib/material-icon//material-icon.html" rel="import">
+<link href="../../../../../lib/dropdown/dropdown.html" rel="import">
+<link href="../../../../../lib/list.html" rel="import">
+<link href="../../../../../lib/select-box/select-box.html" rel="import">
+<link href="basic.html" rel="import">
+<link href="dependencies.html" rel="import">
+
+<oda-module id="report-input-form-parameter-string">
+  <template>
+    <div class="layout" v-if="parameter">
+      <div class="label">{{ parameter.label }}:</div>
+      <div v-if="isParameterList()">
+        <app-select-box :disabled.prop="_loading" :items.prop="valueVariants" :selection-mode="selectionMode"
+                        @selection-change="_onSelectionChange($event)" class="select-box"></app-select-box>
+      </div>
+      <input :disabled="_loading" :type="inputType" class="input" v-else v-model="value">
+    </div>
+    <report-input-form-parameter-dependencies :deps.prop="deps"></report-input-form-parameter-dependencies>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-string',
+      extends: 'report-input-form-parameter-basic',
+      properties: {
+        deps: [],
+        inputType: 'text',
+      },
+      observers: [
+        function itemChange(item) {
+          this.deps = this.getDependencies();
+        },
+      ],
+
+      update() {
+        this._error = null;
+        this._loading = true;
+
+        if (this.isParameterList()) {
+          this.getValueOfQuery()
+            .then((res) => {
+              this.valueVariants = res;
+            })
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              this._error = msg;
+              this.valueVariants = [];
+            })
+            .finally(() => {
+              this._loading = false;
+            });
+        } else {
+          this.getDefaultValueByConfig()
+            .then(value => {
+              this.value = value;
+            })
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              this._error = msg;
+            })
+            .finally(() => {
+              this._loading = false;
+            });
+        }
+      },
+
+      getDefaultValue() {
+        return this.isMultiSelect() ? [] : '';
+      },
+
+      async getDefaultValueByConfig() {
+        if (this.isParameterValueIsQuery()) {
+          return this.isMultiSelect() ? [] : await this.getValueOfQuery();
+        }
+        return String(this.getParameterValue());
+      },
+
+      _onSelectionChange(e) {
+        const items = e && e.detail && Array.isArray(e.detail.value) && e.detail.value.slice() || [];
+        this.value = items.map(i => ({
+          key: i.key === undefined ? i.label : i.key,
+          value: i.label,
+        }));
+      },
+    });
+  </script>
+</oda-module>

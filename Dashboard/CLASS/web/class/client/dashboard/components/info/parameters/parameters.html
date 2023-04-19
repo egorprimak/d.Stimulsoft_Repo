@@ -1,0 +1,88 @@
+<oda-module id="report-parameters">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+    </style>
+
+    <header class="panel">
+      <h4 class="title">Параметры</h4>
+    </header>
+    <div>
+      <app-button @click="openConfigurator()" icon="launch">Настроить в конфигураторе</app-button>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-parameters',
+      properties: {
+        contextItem: Object,
+        report: Object,
+      },
+      openConfigurator() {
+        const url = `${this.report.url}/~/client/form/index.html?view=configurator`;
+        window.open(url, '_blank');
+      },
+    });
+  </script>
+</oda-module>

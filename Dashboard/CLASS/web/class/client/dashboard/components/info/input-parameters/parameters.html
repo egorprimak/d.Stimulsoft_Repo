@@ -1,0 +1,323 @@
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="parameter-list-item.html" rel="import">
+
+<oda-module id="report-input-parameters">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+
+      .error {
+        margin: 0;
+        color: red;
+        font-size: 12px;
+        padding: 0 10px 10px 5px;
+      }
+
+      .list {
+        overflow: hidden;
+      }
+    </style>
+    <header class="panel">
+      <h4 class="title">Входные параметры <span class="count" v-if="count > 0">[{{count}}]</span></h4>
+      <div class="actions" v-if="_ready">
+        <action-btn @click="preview()" class="item" title="Предпросмотр"
+                    v-if="parameters && parameters.some(p => p.saved)">
+          <material-icon icon="preview"></material-icon>
+        </action-btn>
+        <action-btn @click="create()" class="item" title="Создать" v-if="!_creating">
+          <material-icon icon="add_box"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="saveAll()" class="item" title="Сохранить все" v-if="!_saving">
+          <material-icon icon="save"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="removeAll()" active-color="red" class="item" title="Удалить все" v-if="!_deleting">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </header>
+    <p class="error" v-if="_ready && duplicateNames.length > 0">
+      Обнаружены поля с повторяющимися именами: {{duplicateNames.join(', ')}}
+    </p>
+    <app-list class="list" :items.prop="parameters" item-template="report-input-parameter-list-item"
+              no-data-text="Параметров нет" selection-mode="single" v-if="_ready"></app-list>
+    <loading-spinner size="40" v-else></loading-spinner>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-parameters',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        parameters: [],
+        count: {
+          type: Number,
+          get() {
+            return Array.isArray(this.parameters) ? this.parameters.length : 0;
+          },
+        },
+        _ready: false,
+        _deleting: false,
+        _creating: false,
+        _saving: false,
+        duplicateNames: {
+          type: Array,
+          get() {
+            const names = new Set();
+            const duplicates = new Set();
+            const fields = this._getFields();
+            for (const f of fields) {
+              if (names.has(f.name)) {
+                duplicates.add(f.name);
+              } else {
+                names.add(f.name);
+              }
+            }
+            return Array.from(duplicates.values());
+          },
+        },
+      },
+      observers: [
+        function dataSourceChange(contextItem, report) {
+          this._loadData();
+        },
+      ],
+      listeners: {
+        ['save-parameter'](e) {
+          this.saveParameters([e.detail.value]);
+        },
+        ['remove-parameter'](e) {
+          this.removeParameters([e.detail.value]);
+        },
+        ['move-attr-up'](e) {
+          const item = e.detail.value;
+          const idx = this.parameters.indexOf(item);
+
+          if (idx > 0) {
+            this.parameters.splice(idx, 1);
+            this.parameters.splice(idx - 1, 0, item);
+          }
+        },
+        ['move-attr-down'](e) {
+          const item = e.detail.value;
+          const idx = this.parameters.indexOf(item);
+
+          if (idx > -1 && idx < this.parameters.length - 1) {
+            this.parameters.splice(idx, 1);
+            this.parameters.splice(idx + 1, 0, item);
+          }
+        },
+      },
+      _loadData() {
+        this._ready = false;
+
+        if (!this.report || !this.contextItem) {
+          this._ready = true;
+          this.parameters = [];
+          return;
+        }
+
+        this._getParametersOfReport(this.report)
+          .then((parameters) => {
+            this.parameters = Array.isArray(parameters)
+              ? parameters.map(parameter => ({
+                parameter,
+                contextItem: this.contextItem,
+                saved: true,
+                selected: false,
+              }))
+              : [];
+          })
+          .catch(() => {
+            this.parameters = [];
+          })
+          .finally(() => {
+            this._ready = true;
+          });
+      },
+      removeAll() {
+        if (!Array.isArray(this.parameters) || this.parameters.length === 0) {
+          return;
+        }
+        if (confirm('Вы уверены, что хотите удалить все параметры?')) {
+          this._deleting = true;
+          this.parameters = [];
+          this._saveFields([])
+            .catch((err) => {
+              alert(`Ошибка удаления: ${String(err)}`);
+            })
+            .finally(() => {
+              this._deleting = false;
+            });
+        }
+      },
+      removeParameters(params) {
+        if (!Array.isArray(params)) {
+          return;
+        }
+        this._deleting = true;
+
+        const removeParam = (param) => {
+          const idx = this.parameters.findIndex(i => i.parameter === param);
+          if (idx !== -1) {
+            this.parameters.splice(idx, 1);
+          }
+        };
+
+        for (const p of params) {
+          removeParam(p);
+        }
+
+        const fields = this._getFields();
+        this._saveFields(fields)
+          .catch((err) => {
+            alert(`Ошибка удаления: ${String(err)}`);
+          })
+          .finally(() => {
+            this._deleting = false;
+          });
+      },
+      create() {
+        const parameter = { label: 'Новый параметр', name: 'noName' };
+        this.parameters.push({
+          parameter,
+          contextItem: this.contextItem,
+          saved: false,
+        });
+      },
+      saveAll() {
+        this.saveParameters(this._getFields());
+      },
+      saveParameters(params) {
+        if (!Array.isArray(params) || params.length === 0) {
+          return;
+        }
+        this._saving = true;
+        const items = params
+          .map(p => this.parameters.find(i => i.parameter === p))
+          .filter(i => !!i && typeof i === 'object');
+
+        for (const item of items) {
+          if (typeof item._applyChanges === 'function') {
+            item._applyChanges();
+          }
+        }
+
+        const fields = this._getFields();
+
+        this._saveFields(fields)
+          .then(() => {
+            for (const i of items) {
+              i.saved = true;
+            }
+          })
+          .catch((err) => {
+            alert(`Ошибка сохранения: ${String(err)}`);
+          })
+          .finally(() => {
+            this._saving = false;
+          });
+      },
+      _getFields() {
+        return Array.isArray(this.parameters)
+          ? this.parameters.map(p => p.parameter).filter(Boolean)
+          : [];
+      },
+      async _saveFields(fields) {
+        if (!this.report) {
+          return;
+        }
+        const structure = await this.report.$STATIC.$object;
+        structure.Root.$fields = fields;
+        return await structure.save();
+      },
+
+      async preview() {
+        const params = this._getFields();
+        if (params && params.length > 0) {
+          const form = await ODA.createElement('report-input-form');
+          form.devMode = true;
+          form.contextItem = this.contextItem;
+          form.report = this.report;
+          await ODA.showDialog(form, {
+            title: 'Предпросмотр входных параметров',
+          });
+        }
+      },
+    });
+  </script>
+</oda-module>

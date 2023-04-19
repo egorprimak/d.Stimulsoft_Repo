@@ -1,0 +1,118 @@
+<link href="/web/lib/code-mirror/code-mirror.html" rel="import">
+<link href="../../../../lib/button.html" rel="import">
+
+<oda-module id="access-editor">
+  <template>
+    <style>
+      :host {
+        display: block;
+        overflow: hidden;
+      }
+
+      label {
+        padding: 0;
+        margin: 0;
+      }
+
+      .editor, .loader {
+        width: 100%;
+        height: 300px;
+      }
+
+      .editor-wrapper {
+        border: 1px solid #bababa;
+        border-radius: 3px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .title {
+        padding: 0;
+        margin: 10px 0;
+      }
+
+      .input {
+        padding: 3px;
+        margin: 0;
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #bababa;
+        border-radius: 3px;
+        font-size: 14px;
+        font-family: sans-serif;
+      }
+    </style>
+    <h5 class="title">Источник запроса (опционально)</h5>
+    <label>
+      <input @input="onQuerySourceEdited()" class="input" type="text" v-model="querySource">
+    </label>
+    <h5 class="title">Запрос</h5>
+    <div class="editor-wrapper" v-if="_ready">
+      <oda-code-mirror
+          ::value.prop="query"
+          class="editor"
+          mode="xquery"
+          ref="editor"
+      ></oda-code-mirror>
+    </div>
+    <div class="loader" v-else>
+      <loading-spinner size="40"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'access-editor',
+      properties: {
+        report: {
+          type: Object,
+          watch() {
+            this._ready = false;
+            this.reset().finally(() => {
+              this._ready = true;
+            });
+          },
+        },
+        query: {
+          value: '',
+          watch(query) {
+            this.fire('query-edited', query);
+          },
+        },
+        querySource: {
+          value: '',
+          watch() {
+            this.onQuerySourceEdited();
+          },
+        },
+        _ready: false,
+      },
+      observers: [
+        function onReady(_ready) {
+          if (!_ready) {
+            return;
+          }
+          setTimeout(() => {
+            this.refresh();
+          }, 100);
+        },
+      ],
+      onQuerySourceEdited() {
+        this.fire('query-source-edited', this.querySource);
+      },
+      refresh() {
+        this.$refs.editor && this.$refs.editor.refresh();
+      },
+      async reset() {
+        if (!this.report) {
+          this.query = '';
+          this.querySource = '';
+          return;
+        }
+        const structureObject = await this.report.$STATIC.$object;
+        const structure = structureObject.Root;
+        this.query = structure.accessQuery || '';
+        this.querySource = structure.accessQuerySource || '';
+      },
+    });
+  </script>
+</oda-module>

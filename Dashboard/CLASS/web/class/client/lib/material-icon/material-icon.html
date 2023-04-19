@@ -1,0 +1,52 @@
+<link href="material-icons-font.css" rel="stylesheet">
+
+<oda-module id="material-icon">
+  <template>
+    <style>
+      :host {
+        display: inline-block;
+        padding: 0;
+        margin: 0;
+      }
+
+      .icon {
+        font-family: 'Material Icons';
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        display: inline-block;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: normal;
+        word-wrap: normal;
+        white-space: nowrap;
+        direction: ltr;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        -moz-osx-font-smoothing: grayscale;
+        font-feature-settings: 'liga';
+      }
+    </style>
+    <div :style="_iconStyle" class="icon">{{icon}}</div>
+  </template>
+  <script>
+    ODA({
+      is: 'material-icon',
+      properties: {
+        icon: '',
+        size: 24,
+        _iconStyle: {
+          type: Object,
+          get() {
+            return {
+              fontSize: this._convertSize(this.size),
+            };
+          },
+        },
+      },
+      _convertSize(value) {
+        return typeof value === 'number' ? `${value}px` : value;
+      },
+    });
+  </script>
+</oda-module>

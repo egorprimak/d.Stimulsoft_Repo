@@ -1,0 +1,67 @@
+<oda-module id="parameter-detail-other">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .option {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .complex-editor {
+        flex-basis: 100%;
+      }
+
+      .w-100 {
+        width: 100%;
+      }
+
+      .code-editor {
+        width: 100%;
+        height: 300px;
+      }
+
+      .code-editor-wrapper {
+        border: 1px solid #bababa;
+        border-radius: 3px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .option.inset {
+        margin: 5px 0;
+      }
+
+      .flex-1 {
+        flex: 1;
+      }
+
+      input, textarea {
+        box-sizing: border-box;
+      }
+    </style>
+  </template>
+  <script>
+    ODA({
+      is: 'parameter-detail-other',
+    });
+  </script>
+</oda-module>

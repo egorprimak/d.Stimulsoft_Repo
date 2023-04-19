@@ -1,0 +1,28 @@
+<oda-module id="report-input-form-parameter-dependencies">
+  <template>
+    <style>
+      :host {
+        font-size: 11px;
+        width: 100%;
+        padding: 0 25px;
+      }
+    </style>
+    <div class="list" v-if="deps && deps.length > 0">
+      Зависит от: {{ getDepsLabels() }}
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-dependencies',
+      properties: {
+        deps: [],
+      },
+      getDepsLabels() {
+        if (!Array.isArray(this.deps)) {
+          return '';
+        }
+        return this.deps.map(d => d && d.label || '').join(', ');
+      },
+    });
+  </script>
+</oda-module>

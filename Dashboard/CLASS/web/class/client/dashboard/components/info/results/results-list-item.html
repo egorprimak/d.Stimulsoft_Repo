@@ -1,0 +1,323 @@
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+
+<oda-module id="report-results-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+      }
+
+      .detail {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .status {
+        line-height: 0;
+        margin-right: 5px;
+      }
+
+      .date {
+        opacity: .8;
+        font-size: .8em;
+        margin-right: 10px;
+        white-space: nowrap;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .label {
+        width: 100%;
+        margin-right: 10px;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .author {
+        color: #0375ff;
+      }
+    </style>
+    <div @dblclick.stop="open()" class="detail" v-if="item && result">
+      <material-icon class="status" icon="fiber_new" size="18" title="Новый отчет" v-if="isNew"></material-icon>
+      <material-icon :icon="statusIcon" :style="{color: statusColor}" :title="statusMessage" class="status" size="18"
+                     v-if="statusIcon"></material-icon>
+      <div class="date" title="Дата начала формирования" v-if="!resultDate">[{{date}}]</div>
+      <div class="date" title="Дата формирования" v-if="resultDate">[{{resultDate}}]</div>
+      <div :class="{ author: isAuthor && isMarkAuthor() }" class="label">{{ item.label }}</div>
+      <div class="actions">
+        <action-btn @click.stop="copyLink()" @dblclick.stop class="item" title="Скопировать ссылку на отчет"
+                    v-show="status === 'ready' && _lnkReady && !_lnkCopied">
+          <material-icon icon="link"></material-icon>
+        </action-btn>
+        <action-btn @click.stop @dblclick.stop class="item" title="Ссылка скопирована"
+                    v-show="status === 'ready' && _lnkReady && _lnkCopied">
+          <material-icon icon="check_circle_outline"></material-icon>
+        </action-btn>
+        <div class="loader item" v-if="!_lnkReady">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click.stop="download()" @dblclick.stop class="item" title="Загрузить"
+                    v-if="status === 'ready' && isAllowDownload()">
+          <material-icon icon="get_app"></material-icon>
+        </action-btn>
+        <action-btn @click.stop="open()" @dblclick.stop class="item"
+                    title="Открыть результат на новой вкладке"
+                    v-if="allowPreview && status === 'ready'">
+          <material-icon icon="launch"></material-icon>
+        </action-btn>
+        <action-btn @click.stop="openObject()" @dblclick.stop class="item" title="Открыть объект"
+                    v-if="isAllowOpenObject()">
+          <material-icon icon="wysiwyg"></material-icon>
+        </action-btn>
+        <action-btn @click.stop="openSourceData()" @dblclick.stop class="item" title="Открыть файл с исходными данными"
+                    v-if="isAllowOpenSourceData()">
+          <material-icon icon="list_alt"></material-icon>
+        </action-btn>
+        <action-btn @click.stop="remove()" @dblclick.stop active-color="red" class="item" title="Удалить"
+                    v-if="isShowRemoveButton() && !_deleting">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else-if="isShowRemoveButton()">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-results-list-item',
+      extends: 'common-service',
+      properties: {
+        item: Object,
+        contextItem: {
+          type: Object,
+          get() {
+            return this.item && this.item.contextItem;
+          },
+        },
+        result: {
+          type: Object,
+          get() {
+            return this.item && this.item.result || null;
+          },
+        },
+        status: {
+          type: String,
+          get() {
+            if (!this.result) {
+              return '';
+            }
+            return String(this.result.status || '').trim().toLowerCase();
+          },
+        },
+        statusIcon: {
+          type: String,
+          get() {
+            switch (this.status) {
+              case 'ready':
+                return 'check_circle';
+              case 'error':
+                return 'error';
+              default:
+                return 'watch_later';
+            }
+          },
+        },
+        statusColor: {
+          type: String,
+          get() {
+            switch (this.status) {
+              case 'ready':
+                return '#008f50';
+              case 'error':
+                return '#d9534f';
+              default:
+                return '#8d8d8d';
+            }
+          },
+        },
+        statusMessage: {
+          type: String,
+          get() {
+            switch (this.status) {
+              case 'ready':
+                return 'Отчет сформирован успешно';
+              case 'error':
+                return 'Ошибка формирования отчета: ' + (this.result.message || 'Неизвестная ошибка');
+              default:
+                return 'Формируется';
+            }
+          },
+        },
+        date: {
+          type: String,
+          get() {
+            if (!this.result) {
+              return null;
+            }
+            const date = new Date(this.result.date);
+            return date.toLocaleDateString('ru') + ' ' + date.toLocaleTimeString('ru');
+          },
+        },
+        resultDate: {
+          type: String,
+          get() {
+            if (!this.result || !this.result.resultDate) {
+              return null;
+            }
+            const date = new Date(this.result.resultDate);
+            return date.toLocaleDateString('ru') + ' ' + date.toLocaleTimeString('ru');
+          },
+        },
+        isNew: {
+          type: Boolean,
+          get() {
+            return !!(this.result && ODANT.getBool(this.result.isNew));
+          },
+        },
+        isAuthor: {
+          type: Boolean,
+          get() {
+            return !!(this.result && this.contextItem && this.result.userId === this.contextItem.userId);
+          },
+        },
+        list: {
+          type: Object,
+          get() {
+            return this.item && this.item.list || null;
+          },
+        },
+        format: {
+          type: String,
+          get() {
+            return this.result && this.result.format && String(this.result.format).trim().toLowerCase() || 'mdc';
+          },
+        },
+        allowPreview: {
+          type: Boolean,
+          get() {
+            return this.format === 'mdc';
+          },
+        },
+        _deleting: false,
+        _downloading: false,
+        _lnkCopied: false,
+        _lnkReady: true,
+      },
+      isShowRemoveButton() {
+        return !!(this.list && this.list.showRemoveButton);
+      },
+      isMarkAuthor() {
+        return !!(this.list && this.list.markAuthor);
+      },
+      isAllowDownload() {
+        return !!(this.list && this.list.allowDownload);
+      },
+      isAllowOpenSourceData() {
+        return !!(this.list && this.list.allowOpenSourceData);
+      },
+      isAllowOpenObject() {
+        return !!(this.list && this.list.allowOpenObject);
+      },
+      open() {
+        if (this.status !== 'ready') {
+          return;
+        }
+        if (!this.result || !this.result.oid) {
+          alert('Ошибка при открытии результата: идентификатор отсутствует');
+          return;
+        }
+        if (this.allowPreview) {
+          this._openResultDocument(this.result.oid);
+        } else {
+          this.download();
+        }
+      },
+      copyLink() {
+        if (this.status !== 'ready') {
+          return;
+        }
+        this._lnkReady = false;
+        this._getResultDocumentUrl(this.result.oid).then(url => {
+          this._copyToClipboard(ODANT.origin + url);
+          this._lnkCopied = true;
+          this._lnkReady = true;
+          setTimeout(() => {
+            this._lnkCopied = false;
+          }, 3000);
+        });
+      },
+      remove() {
+        const confirmMsg = `Вы уверены, что хотите удалить "${this.item.label}"?\n` +
+          'Отменить данное действие будет невозможно!';
+        if (!confirm(confirmMsg)) {
+          return;
+        }
+        this._removeResults([this.result.oid]);
+        this.fire('remove-result', this.item);
+      },
+      download() {
+        this._downloading = true;
+        this._getResultsClass()
+          .then(async (repository) => {
+            const resultField = await this._getFieldOfClass('result', repository);
+            const resultObject = await repository.getObject(this.result.oid);
+            const fileObject = await resultField.getValue(resultObject, resultObject.Root);
+            const fileName = `${resultObject.name}.${fileObject.ext}`;
+            const fileUrl = `/api${fileObject.fullId}?method=download&to=${fileName}`;
+            const link = document.createElement('a');
+            link.setAttribute('href', fileUrl);
+            link.setAttribute('download', fileName || 'download');
+            link.click();
+
+            if (this.isNew) {
+              resultObject.Root.isNew = false;
+              return resultObject.save();
+            }
+          })
+          .finally(() => {
+            this._downloading = false;
+          });
+      },
+      openObject() {
+        this._getResultOdaObject()
+          .then((obj) => obj.open())
+          .catch(() => {
+            alert('Объект не найден');
+          });
+      },
+      openSourceData() {
+        this._getResultsClass()
+          .then(cls => this._getFieldOfClass('source', cls))
+          .then(srcField => this._getResultOdaObject()
+            .then(obj => srcField.getValue(obj, obj.Root)),
+          )
+          .then(file => file.open())
+          .catch(() => {
+            alert('Не найден документ с исходными данными');
+          });
+      },
+      _getResultOdaObject() {
+        return this._getResultsClass()
+          .then(cls => cls.getObject(this.result.oid));
+      },
+    });
+  </script>
+</oda-module>

@@ -1,0 +1,637 @@
+<oda-module id="common-service">
+  <script>
+    ODA({
+      is: 'common-service',
+      properties: {
+        contextItem: Object,
+        DASHBOARD_CLASS_ID: '1D6EE3EE7BFC08A',
+        REPORTS_CLASS_ID: '1D6B37FA94258AE',
+        CLASS_AS_REPORT_REPOSITORY_ID: '1D6B35F234F5347',
+        CLASS_LINK_FIELD_NAME: 'targetClass',
+        DESIGNER_CLASS_ID: '1D6B0E90A501BB9',
+        TEMPLATES_CLASS_ID: '1D6B37F8180438B',
+        RESULTS_CLASS_ID: '1D6B3813E994521',
+        REPORT_VIEWER_ID: '1D6B0E918E81D54',
+        REPORT_GENERATOR_ID: '1D6BCB474B39228',
+        TemplateType: {
+          type: Object,
+          default: () => ({
+            Report: 'report',
+            Dashboard: 'dashboard',
+            Any: 'any',
+          }),
+        },
+        _typeExprs: {
+          type: Object,
+          default: () => ({
+            'report': '"report"',
+            'dashboard': '"dashboard"',
+            'any': '()',
+          }),
+        },
+      },
+
+      _isNameOfReportExists(name) {
+        return this._findReportByName(name).then(res => !!res);
+      },
+
+      _findReportByName(name) {
+        return this._getClassOfReports()
+          .then(cls => cls.$classes)
+          .then(classes => classes.find(c => c.name === name));
+      },
+
+      async _createReport(name, { autoSelect = false } = {}) {
+        if (await this._isNameOfReportExists(name)) {
+          throw new Error(`Report with name "${name}" already exists!`);
+        }
+
+        const cls = await this._getClassOfReports();
+        const newReport = await cls._createClass(name);
+        await newReport.save();
+
+        if (autoSelect) {
+          this.fire('select-report', newReport);
+        }
+        this.fire('created-report', newReport);
+        return newReport;
+      },
+
+      async _getTemplates(report) {
+        return this._getTemplatesOf(report, this.TemplateType.Report);
+      },
+
+      async _getDashboards(report) {
+        return this._getTemplatesOf(report, this.TemplateType.Dashboard);
+      },
+
+
+      async _getTemplatesOf(report, type) {
+        if (!report) {
+          throw new Error('Report not defined');
+        }
+        const cls = await this._getTemplatesClass();
+        const index = await cls.getIndex('Pack');
+        const typeExpr = this._typeExprs[type] || (!!type ? `"${type}"` : '()');
+        const xq = `for $item in /PACK/OBJECT[@type=${typeExpr}][oda:right(targetClass/@link, 15)="${report.id}"]\n` +
+          `order by xs:dateTime($item/@date) descending\n` +
+          `return $item`;
+        const queryResult = await index.XQuery(xq);
+        return queryResult && Array.isArray(queryResult.$OBJECT) && queryResult.$OBJECT || [];
+      },
+
+      async _removeTemplate(template) {
+        return await this._removeTemplates([template]);
+      },
+
+      async _removeDashboard(dashboard) {
+        return await this._removeDashboards([dashboard]);
+      },
+
+      async _createTemplate(report, name) {
+        return await this._createTemplateWithType(report, name, this.TemplateType.Report);
+      },
+
+      async _createDashboard(report, name) {
+        return await this._createTemplateWithType(report, name, this.TemplateType.Dashboard);
+      },
+
+      async _createTemplateWithType(report, name, type) {
+        if (!name || !String(name).trim()) {
+          throw Error('Invalid name');
+        }
+
+        const cls = await this._getTemplatesClass();
+        const tpl = await cls.createObject();
+        const targetClsField = await this._getFieldOfClass(this.CLASS_LINK_FIELD_NAME, cls);
+        targetClsField.setValue(tpl, report, tpl.Root);
+        tpl.Root.name = name;
+        tpl.Root.type = type;
+        await tpl.save();
+        return tpl;
+      },
+
+      _removeTemplates(templates) {
+        const oids = templates.map(t => t.oid);
+        return this._getTemplatesClass()
+          .then(cls => cls.removeObjects(oids.join(' ')))
+          .then(() => true)
+          .catch(() => false);
+      },
+
+      _removeDashboards(dashboards) {
+        return this._removeTemplates(dashboards);
+      },
+
+      async _removeTemplatesOfReport(report) {
+        const templates = await this._getTemplates(report);
+        return await this._removeTemplates(templates);
+      },
+
+      async _removeReport(report) {
+        const reportType = this._getTypeOfReport(report);
+        if (reportType === 'report') {
+          report.remove();
+        } else {
+          const repository = await this._getClassAsReportRepository();
+          const repositoryRecordOid = await this._getRepositoryRecordOid(report);
+          await repository.removeObjects(repositoryRecordOid);
+        }
+        await this._removeTemplatesOfReport(report);
+        this.fire('remove-report-from-list', report);
+      },
+
+      _getTypeOfReport(report) {
+        if (!report || !this.contextItem) {
+          return null;
+        }
+        const module = report.$module;
+        if (module && module.id === this.contextItem.id) {
+          return 'report';
+        }
+        return 'class';
+      },
+
+      _openDesigner(params = {}) {
+        this._getClassOfDesigner()
+          .then((designerCls) => {
+            const paramsEntries = !!params && typeof params === 'object' ? Object.entries(params) : [];
+            const urlParams = paramsEntries.length > 0
+              ? '?' + paramsEntries
+              .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+              .join('&')
+              : '';
+            const url = `${designerCls.url}/~/client/stimulsoft-report-designer/index.html${urlParams}`;
+            window.open(url, '_blank');
+          })
+          .catch((err) => {
+            alert(err && err.message || 'Unknown error');
+          });
+      },
+
+      async _getReports(options) {
+        options = !!options && typeof options === 'object' ? options : {};
+        const checkAccess = !!options.checkAccess;
+        const classes = await this._getClassOfReports()
+          .then(cls => cls.$classes);
+
+        const { $base } = this.contextItem;
+        const isAllowAccess = async (cls) => {
+          const staticObj = await cls.$STATIC.$object;
+          if (!staticObj) {
+            return true;
+          }
+          const root = staticObj.Root;
+          if (!root.accessQuery || !String(root.accessQuery).trim()) {
+            return true;
+          }
+          const querySource = root.accessQuerySource
+            ? await $base.findItem(root.accessQuerySource)
+            : cls;
+          if (!querySource) {
+            return false;
+          }
+
+          const preparedQuery = this._prepareQuery(root.accessQuery, {}, cls);
+          const response = await querySource.XQuery(preparedQuery);
+
+          if (!Array.isArray(response) || response.length > 1) {
+            return false;
+          }
+
+          const [item] = response;
+          return String(item).trim().toLowerCase() === 'true';
+        };
+
+        if (checkAccess) {
+          const reportsWithAvailableState = await Promise.all(classes.map(report =>
+            isAllowAccess(report)
+              .catch(() => false)
+              .then(available => ({ report, available })),
+          ));
+          return reportsWithAvailableState
+            .filter(x => x.available)
+            .map(x => x.report);
+        }
+
+        return classes;
+      },
+
+      async _getRepositoryRecordOid(report) {
+        const repository = await this._getClassAsReportRepository();
+        const index = await repository.getIndex('Pack');
+        const xq = `/PACK/OBJECT[oda:right(targetClass/@link, 15)="${report.id}"]`;
+        const queryResult = await index.XQuery(xq);
+        const oid = queryResult && Array.isArray(queryResult.$OBJECT) && queryResult.$OBJECT[0] && queryResult.$OBJECT[0].oid;
+        return oid || null;
+      },
+
+      async _getClasses() {
+        const repository = await this._getClassAsReportRepository();
+        const objects = await repository.$objects;
+        const clsLinkField = await this._getFieldOfClass(this.CLASS_LINK_FIELD_NAME, repository);
+
+        if (!clsLinkField) {
+          throw Error(`Field ${this.CLASS_LINK_FIELD_NAME} not found in class ${this.CLASS_AS_REPORT_REPOSITORY_ID}`);
+        }
+
+        return (await Promise.all(objects.map(o => clsLinkField.getValue(o, o.Root)))).filter(Boolean);
+      },
+
+      async _getClassOfReports() {
+        const cls = await this.contextItem.getClass(this.REPORTS_CLASS_ID);
+        if (!cls) {
+          throw Error('Class of reports not found');
+        }
+        return cls;
+      },
+
+      async _getClassAsReportRepository() {
+        const cls = await this.contextItem.getClass(this.CLASS_AS_REPORT_REPOSITORY_ID);
+        if (!cls) {
+          throw Error('Repository of classes as reports not found');
+        }
+        return cls;
+      },
+
+      async _getClassOfDesigner() {
+        const cls = await this.contextItem.getClass(this.DESIGNER_CLASS_ID);
+        if (!cls) {
+          throw Error('Class of designer not found');
+        }
+        return cls;
+      },
+
+      async _getTemplatesClass() {
+        const cls = await this.contextItem.getClass(this.TEMPLATES_CLASS_ID);
+        if (!cls) {
+          throw new Error('Templates repository not found!');
+        }
+        return cls;
+      },
+
+      async _getDashboardsClass() {
+        return await this._getTemplatesClass();
+      },
+
+      async _getResultsClass() {
+        const cls = await this.contextItem.getClass(this.RESULTS_CLASS_ID);
+        if (!cls) {
+          throw new Error('Results repository not found!');
+        }
+        return cls;
+      },
+
+      async _getReportViewer() {
+        const cls = await this.contextItem.getClass(this.REPORT_VIEWER_ID);
+        if (!cls) {
+          throw new Error('Report viewer not found!');
+        }
+        return cls;
+      },
+
+      async _getReportGenerator() {
+        const cls = await this.contextItem.getClass(this.REPORT_GENERATOR_ID);
+        if (!cls) {
+          throw new Error('Report generator not found!');
+        }
+        return cls;
+      },
+
+      async _getDashboardClass() {
+        const cls = await this.contextItem.getClass(this.DASHBOARD_CLASS_ID);
+        if (!cls) {
+          throw new Error('Dashboard class not found!');
+        }
+        return cls;
+      },
+
+      _getFieldOfClass(fieldName, cls) {
+        return cls.fields.then(fields => fields.find(f => f.name === fieldName));
+      },
+
+      async _getClassStaticObject(cls) {
+        return await cls?.$STATIC?.$object;
+      },
+
+      async _getResultsOrReport(reportId, { owners = null } = {}, type) {
+        const repository = await this._getResultsClass();
+        const index = await repository.getIndex('Pack');
+        const quout = v => `"${v}"`;
+        const ownersXq = Array.isArray(owners) && owners.length > 0
+          ? `[@userId=(${owners.map(quout).join(',')})]`
+          : '';
+        const typeExpr = this._typeExprs[type] || (!!type ? `"${type}"` : '()');
+        const xq = `for $item in /PACK/OBJECT[@type=${typeExpr}][oda:right(targetClass/@link, 15)="${reportId}"]${ownersXq}\n` +
+          `order by xs:dateTime($item/@date) descending\n` +
+          `return $item`;
+        const queryResult = await index.XQuery(xq);
+        return queryResult && Array.isArray(queryResult.$OBJECT) && queryResult.$OBJECT || [];
+      },
+
+      async _openResultDocument(id) {
+        const repository = await this._getResultsClass();
+        const resultObject = await repository.getObject(id);
+
+        if (String(resultObject.Root.format).toLowerCase().trim() === 'mdc') {
+          this._getResultDocumentUrl(id).then(url => {
+            window.open(url, '_blank');
+          });
+        } else {
+          const resultField = await this._getFieldOfClass('result', repository);
+          const fileObject = await resultField.getValue(resultObject, resultObject.Root);
+          const fileName = `${resultObject.name}.${fileObject.ext}`;
+          const fileUrl = `/api${fileObject.fullId}?method=download&to=${fileName}`;
+          const link = document.createElement('a');
+          link.setAttribute('href', fileUrl);
+          link.setAttribute('download', fileName || 'download');
+          link.click();
+
+          if (this.isNew) {
+            resultObject.Root.isNew = false;
+            await resultObject.save();
+          }
+        }
+      },
+
+      _getResultDocumentUrl(id) {
+        return this._getReportViewer().then(cls => {
+          return `/api${cls.fullId}/~/client/stimulsoft-report-viewer/index.html?document=${id}`;
+        });
+      },
+
+      async _removeResults(ids) {
+        if (!Array.isArray(ids)) {
+          return false;
+        }
+        if (ids.length === 0) {
+          return true;
+        }
+        return this._getResultsClass()
+          .then(cls => cls.removeObjects(ids.join(' ')))
+          .then(() => true)
+          .catch(() => false);
+      },
+
+      _saveAsFile(content, name, type = 'text/plain') {
+        const blob = new Blob([String(content)], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', name);
+        link.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+        return true;
+      },
+
+      async _getParametersOfReport(report) {
+        if (this._getTypeOfReport(report) !== 'report') {
+          return null;
+        }
+        const staticItem = await report.$STATIC.$object;
+        return staticItem && staticItem.Root.$fields || [];
+      },
+
+      async _getInputParametersForReport(report, devMode = false) {
+        const params = await this._getParametersOfReport(report);
+
+        if (params && params.length > 0) {
+          const form = await ODA.createElement('report-input-form');
+          form.devMode = !!devMode;
+          form.contextItem = this.contextItem;
+          form.report = report;
+          await ODA.showDialog(form, {
+            title: 'Входные параметры',
+          });
+          return { ...form.getItemsValues() };
+        }
+
+        return {};
+      },
+
+      async _generateTemplateOfReport(templateId, reportId, reportType, data = null) {
+        const generator = await this._getReportGenerator();
+        const templates = await this._getTemplatesClass();
+        const fileField = await this._getFieldOfClass('file', templates);
+        const templateObject = await templates.getObject(templateId);
+        const fileObject = await fileField.getValue(templateObject, templateObject.Root);
+        const hash = Math.round(Math.random() * 1e15).toString(16);
+        const stiTemplate = await fileObject.load({ hash }).then(res => res.text());
+
+        const params = JSON.stringify({
+          report: reportId,
+          template: templateId,
+          data,
+          userId: this.contextItem.userId,
+          stiTemplate,
+          reportType,
+        });
+
+        return await generator.executeServerAction('generate', params);
+      },
+
+      async _generateDashboardOfReport(dashboardId, reportId, reportType, data = null) {
+        return await this._generateTemplateOfReport(dashboardId, reportId, reportType, data);
+      },
+
+      _inputValueToString(value) {
+        if (typeof value === 'object' && value !== null) {
+          const prepare = v => String(v).replaceAll('"', '&quot;');
+          const items = Object.entries(value).map(([key, value]) => {
+            return `<item key="${prepare(key)}" value="${prepare(value)}"/>`;
+          }).join('');
+          return `<list>${items}</list>`;
+        } else if (value === undefined || value === null) {
+          return '';
+        } else {
+          return String(value);
+        }
+      },
+
+      _prepareQuery(query, data, report, customSystemVariables = {}) {
+        for (const key in data) {
+          if (!data.hasOwnProperty(key)) {
+            continue;
+          }
+          const varName = `[#${key}#]`;
+          const value = this._inputValueToString(data[key]);
+          query = query.replaceAll(varName, value);
+        }
+
+        const validTemplateTypes = ['report', 'dashboard'];
+        const templateType = validTemplateTypes.includes(customSystemVariables.template_type)
+          ? customSystemVariables.template_type
+          : 'report';
+        const isReport = templateType === 'report';
+        const isDashboard = templateType === 'dashboard';
+
+        const templateName = report ? report.label : 'unknown';
+        return query
+          .replaceAll(/\[#[-_$%&@^*"'|.A-Z0-9]*#]/ig, 'undefined')
+          .replaceAll('[%user_id%]', customSystemVariables.user_id || this.contextItem.userId)
+          .replaceAll('[%host_id%]', this.contextItem.$host.id)
+          .replaceAll('[%template_type%]', templateType)
+          .replaceAll('[%is_report%]', String(isReport))
+          .replaceAll('[%is_dashboard%]', String(isDashboard))
+          .replaceAll('[%template_name%]', templateName);
+      },
+
+      _copyToClipboard(value) {
+        const input = document.createElement('input');
+        input.style.opacity = '0';
+        input.style.display = 'fixed';
+        document.body.appendChild(input);
+        input.value = value;
+        input.focus();
+        input.select();
+        try {
+          document.execCommand('Copy');
+          return true;
+        } catch {
+          return false;
+        } finally {
+          input.remove();
+        }
+      },
+
+      _getObjectsFromResult(r) {
+        if (!r || typeof r !== 'object') {
+          return [];
+        }
+        return r.$REPORTS && r.$REPORTS[0] && Array.isArray(r.$REPORTS[0].$PACK)
+          && r.$REPORTS[0].$PACK.map(p => p.$OBJECT).flat()
+          || r.$PACK && r.$PACK[0] && r.$PACK[0].$OBJECT
+          || r.$OBJECT
+          || [];
+      },
+
+      async _request(item, params = {}, post) {
+        let result = await ODANT.API.request(item.url, params, post);
+        if (params.async) {
+          const checkAsyncStatus = async (handle, delay) => {
+
+            let command = 'status';
+            switch (handle.status) {
+              case 'ready': {
+                command = 'load';
+              }
+                break;
+              case 'break': {
+                command = 'break';
+              }
+                break;
+            }
+            try {
+              const result = await ODANT.API.request(ODANT.origin + handle.url + '/' + command);
+              if (result === undefined || result === null) {
+                return result;
+              }
+              handle.status = result.status;
+              switch (handle.status) {
+                case 'ready': {
+                  return checkAsyncStatus(handle);
+                }
+                case undefined: {
+                  return result;
+                }
+                default: {
+                  return new Promise((resolve, reject) => {
+                    const callback = async () => {
+                      try {
+                        const result = await checkAsyncStatus(handle, delay);
+                        resolve(result);
+                      } catch (err) {
+                        reject(err);
+                      }
+                    };
+                    setTimeout(callback, delay);
+                  });
+                }
+              }
+            } catch (err) {
+              handle.status = 'break';
+              throw err;
+            }
+          };
+          result = await checkAsyncStatus(result, 100);
+        }
+        return result;
+      },
+
+      async _xquery(item, query, format = 'json') {
+        return await this._request(item, { method: 'xquery', async: true, format }, query);
+      },
+
+      async _showError(err, title = 'Error', description = '') {
+        const component = document.createElement('div');
+        Object.assign(component.style, {
+          overflow: 'auto',
+          fontSize: '14px',
+        });
+
+        if (!!description && !!String(description).trim()) {
+          const desc = document.createElement('div');
+          Object.assign(desc.style, {
+            margin: '15px',
+            color: '#000',
+          });
+          desc.textContent = description;
+          component.append(desc);
+
+          const divider = document.createElement('hr');
+          Object.assign(divider.style, {
+            border: '0',
+            height: '1px',
+            backgroundColor: '#d3d3d3',
+          });
+          component.append(divider);
+        }
+
+        const msg = err instanceof Error ? String(err.message) : String(err);
+        const pre = document.createElement('pre');
+        Object.assign(pre.style, {
+          margin: '15px',
+          color: '#810000',
+          fontSize: '13px',
+        });
+        pre.textContent = msg;
+        component.append(pre);
+
+        return ODA.showDialog(component, {
+          title,
+          icon: 'icons:error',
+        });
+      },
+
+      async _showXML(xml, title = 'XML', description = '') {
+        const format = require('xml-formatter');
+        const container = document.createElement('div');
+        Object.assign(container.style, {
+          overflow: 'hidden',
+          width: '100vw',
+          height: '100vh',
+        });
+
+        const formattedValue = await new Promise((r) => r(format(xml, { collapseContent: true })))
+          .catch(() => format(`<debug:response>${xml}</debug:response>`, { collapseContent: false }))
+          .catch(() => String(xml));
+
+        const editor = await ODA.createComponent('/web/lib/code-mirror/code-mirror.html', {
+          value: formattedValue,
+          mode: 'xml',
+          readOnly: true,
+        });
+        Object.assign(editor.style, {
+          height: '100%',
+        });
+        container.append(editor);
+        return ODA.showDialog(container, {
+          title: 'XML',
+          icon: 'files:xml',
+        });
+      },
+    });
+  </script>
+</oda-module>

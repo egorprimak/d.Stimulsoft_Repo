@@ -1,0 +1,23 @@
+<oda-module id="reports-class-group-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 10px;
+        color: #19478a;
+        font-size: 1.1em;
+      }
+    </style>
+    <div v-if="item">
+      <b>{{ item.label }}</b>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-class-group-item',
+      properties: {
+        item: Object,
+      },
+    });
+  </script>
+</oda-module>

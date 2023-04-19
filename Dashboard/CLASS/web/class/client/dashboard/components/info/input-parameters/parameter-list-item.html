@@ -1,0 +1,364 @@
+<link href="../../common.html" rel="import">
+
+<link href="options/boolean.html" rel="import">
+<link href="options/datetime.html" rel="import">
+<link href="options/number.html" rel="import">
+<link href="options/string.html" rel="import">
+<link href="options/date.html" rel="import">
+
+<link href="visibility-query-editor.html" rel="import">
+
+<oda-module id="report-input-parameter-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        font-size: 14px;
+      }
+
+      .layout {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .record {
+        padding: 5px;
+        display: flex;
+        align-items: center;
+      }
+
+      .label {
+        color: black;
+        overflow: auto !important;
+        white-space: normal !important;
+        text-overflow: ellipsis !important;
+      }
+
+      .name {
+        color: #19478a;
+      }
+
+      .type {
+        margin-left: 5px;
+      }
+
+      .type select {
+        font: inherit;
+        background: inherit;
+        color: inherit;
+        outline: none;
+        border: none;
+        appearance: none;
+        text-align-last: right;
+      }
+
+      .type select option {
+        color: #000;
+      }
+
+      div.name:before {
+        content: '[';
+      }
+
+      div.name:after {
+        content: ']';
+      }
+
+      .name[contenteditable='true'],
+      .label[contenteditable='true'] {
+        border-bottom: 1px solid currentColor;
+      }
+
+      :host(.selected) .label {
+        color: white;
+      }
+
+      :host(.selected) .name {
+        color: #00c3ff;
+      }
+
+      .detail {
+        height: 0;
+        position: relative;
+        transition: .3s;
+        background-color: #fff;
+        color: #555;
+        overflow: auto;
+      }
+
+      :host(.selected) .detail {
+        height: 435px;
+      }
+
+      .detail__container {
+        padding: 10px;
+        position: relative;
+        overflow: auto;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .action-item + .action-item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      :host(.selected) .action-item > material-icon {
+        color: #fff;
+      }
+
+      .is-list {
+        display: flex;
+        align-items: center;
+        margin-right: 5px;
+      }
+
+      .is-list input {
+        position: relative;
+        top: 1px;
+      }
+    </style>
+    <div class="layout" v-if="parameter">
+      <div class="record">
+        <div class="actions" style="margin-right: 10px;">
+          <action-btn @click.stop="moveUp()" class="action-item" title="Поднять">
+            <material-icon icon="north" size="14"></material-icon>
+          </action-btn>
+          <action-btn @click.stop="moveDown()" class="action-item" title="Опустить">
+            <material-icon icon="south" size="14"></material-icon>
+          </action-btn>
+          <action-btn @click.stop="editVisibilityQuery()" class="action-item" title="Изменить запрос видимости">
+            <material-icon icon="visibility"></material-icon>
+          </action-btn>
+        </div>
+        <div class="actions" style="margin-right: 10px;" v-show="isEdited() || !isSaved()">
+          <action-btn @click.stop="clientReset()" class="action-item" title="Сбросить" v-show="isSaved() && isEdited()">
+            <material-icon icon="undo" size="16"></material-icon>
+          </action-btn>
+          <action-btn @click.stop="save()" class="action-item" title="Сохранить" v-show="isEdited() || !isSaved()">
+            <material-icon icon="save" size="16"></material-icon>
+          </action-btn>
+        </div>
+        <div :contenteditable="labelEditMode" @blur="labelEditMode = false" @click.stop="labelEditMode = true"
+             @input="onEditLabel($event.target.textContent)"
+             @keydown.stop.prevent.enter="labelEditMode = false" class="label"
+             ref="label"></div>
+        <div :contenteditable="nameEditMode" @blur="nameEditMode = false" @click.stop="nameEditMode = true"
+             @input="name = $event.target.textContent"
+             @keydown.stop.prevent.enter="nameEditMode = false" class="name"
+             ref="name"></div>
+        <div style="margin-left: auto"></div>
+        <label @click.stop class="is-list" v-show="type !== 'boolean'">
+          <input type="checkbox" v-model="isList"> Список
+        </label>
+        <label @click.stop class="is-list" v-show="type !== 'boolean' && isList">
+          (<input type="checkbox" v-model="multiSelect"> мультивыбор)
+        </label>
+        <div @click.stop class="type">
+          <select v-model="type">
+            <option value="string">Строка</option>
+            <option value="number">Число</option>
+            <option value="boolean">Логическое</option>
+            <option value="date">Дата</option>
+            <option value="datetime">Дата и время</option>
+          </select>
+        </div>
+        <div class="actions" style="margin-left: 10px">
+          <action-btn @click.stop="remove()" active-color="red" class="action-item" title="Удалить">
+            <material-icon icon="delete"></material-icon>
+          </action-btn>
+        </div>
+      </div>
+      <div @click.stop @dblclick.stop @keydown.stop class="detail">
+        <div class="detail__container">
+          <div :is="'parameter-detail-' + type" :list.prop="isList" :options.prop="getParameterOptions()"
+               @detail-edited="detailEdited = $event.detail.value" ref="detail"></div>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-parameter-list-item',
+      extends: 'common-service',
+      properties: {
+        item: {
+          type: Object,
+          watch(item) {
+            this.parameter = item && item.parameter || null;
+            this.contextItem = item && item.contextItem || null;
+          },
+        },
+        parameter: Object,
+        contextItem: Object,
+        label: '',
+        name: '',
+        type: 'string',
+        isList: false,
+        multiSelect: false,
+        nameEditMode: {
+          type: Boolean,
+          default: false,
+          watch(enabled) {
+            if (enabled) {
+              this._prevName = this.name.trim();
+            } else if (!this.name.trim()) {
+              this.name = this._prevName.trim();
+              this._repaintLabelAndName();
+            }
+          },
+        },
+        labelEditMode: {
+          type: Boolean,
+          default: false,
+          watch(enabled) {
+            if (enabled) {
+              this._prevLabel = this.label.trim();
+            } else if (!this.label.trim()) {
+              this.label = this._prevLabel.trim();
+              this._repaintLabelAndName();
+            }
+          },
+        },
+        detailEdited: false,
+        visibilityEdited: false,
+        _prevLabel: '',
+        _prevName: '',
+      },
+      observers: [
+        function itemChange(item) {
+          this.reset();
+          this.item._applyChanges = () => {
+            this._applyChanges();
+          };
+          this.render();
+        },
+      ],
+      attached() {
+        setTimeout(() => {
+          this.reset();
+        }, 10);
+        this.render();
+      },
+      clientReset() {
+        if (confirm('Сбросить изменения?')) {
+          this.reset();
+        }
+        this.render();
+      },
+      reset() {
+        this.label = this.getParameterLabel();
+        this.name = this.getParameterName();
+        this.type = this.getParameterType();
+        this.isList = this.isParameterIsList();
+        this.multiSelect = this.isParameterMultiSelect();
+        this._repaintLabelAndName();
+        if (this.$refs.detail) {
+          this.$refs.detail.reset();
+          this.$refs.detail.applyChanges();
+        }
+      },
+      isEdited() {
+        const nameEdited = this.name !== this.getParameterName();
+        const labelEdited = this.label !== this.getParameterLabel();
+        const typeEdited = this.type !== this.getParameterType();
+        const isListEdited = this.isList !== this.isParameterIsList();
+        const multiSelectEdited = this.multiSelect !== this.isParameterMultiSelect();
+        const detailEdited = this.detailEdited;
+        const visibilityEdited = this.visibilityEdited;
+        return nameEdited || labelEdited || typeEdited || isListEdited || multiSelectEdited || detailEdited || visibilityEdited;
+      },
+      getParameterType() {
+        return this.parameter && this.parameter.type || 'string';
+      },
+      getParameterOptions() {
+        return this.parameter && this.parameter.$options && this.parameter.$options[0] || null;
+      },
+      getParameterLabel() {
+        return this.parameter && this.parameter.label || '';
+      },
+      getParameterName() {
+        return this.parameter && this.parameter.name || '';
+      },
+      isParameterIsList() {
+        return ODANT.getBool(this.parameter && this.parameter.isList);
+      },
+      isParameterMultiSelect() {
+        return ODANT.getBool(this.parameter && this.parameter.multiSelect);
+      },
+      isSaved() {
+        return !!(this.item && this.item.saved);
+      },
+      save() {
+        this.fire('save-parameter', this.parameter);
+      },
+      remove() {
+        if (confirm('Удалить параметр?')) {
+          this.fire('remove-parameter', this.parameter);
+        }
+      },
+      _applyChanges() {
+        this.parameter.label = this.label;
+        this.parameter.name = this.name;
+        this.parameter.isList = this.isList;
+        this.parameter.type = this.type;
+        this.parameter.multiSelect = this.multiSelect;
+        this.visibilityEdited = false;
+
+        if (!(this.parameter.$options && this.parameter.$options[0])) {
+          this.parameter.$options = [{}];
+        }
+
+        if (this.$refs.detail) {
+          this.$refs.detail.applyChanges();
+          Object.assign(this.parameter.$options[0], this.$refs.detail.options);
+        }
+      },
+
+      moveUp() {
+        this.fire('move-attr-up', this.item);
+      },
+      moveDown() {
+        this.fire('move-attr-down', this.item);
+      },
+      onEditLabel(label) {
+        this.label = label;
+      },
+
+      async editVisibilityQuery() {
+        const editor = await ODA.createElement('report-parameter-visibility-query-editor');
+        Object.assign(editor, {
+          parameter: this.parameter,
+        });
+        ODA.showDialog(editor, {
+          disableOKByEnter: true,
+        })
+          .then(() => {
+            const { query } = editor;
+            this.visibilityEdited = true;
+            if (!(this.parameter.$options && this.parameter.$options[0])) {
+              this.parameter.$options = [{}];
+            }
+            this.parameter.$options[0].visibilityQuery = query;
+          });
+      },
+
+      _repaintLabelAndName() {
+        if (this.$refs && this.$refs.name && this.$refs.label) {
+          this.$refs.name.textContent = this.name;
+          this.$refs.label.textContent = this.label;
+        }
+      },
+    });
+  </script>
+</oda-module>

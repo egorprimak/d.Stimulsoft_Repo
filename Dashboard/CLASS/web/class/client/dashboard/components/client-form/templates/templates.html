@@ -1,0 +1,44 @@
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="list-item.html" rel="import">
+
+<oda-module id="reports-client-form-templates">
+  <template>
+    <app-list
+        :items.prop="_templates"
+        @select-template.stop="selectTemplate($event.detail.value)"
+        item-template="reports-client-form-template-list-item"
+    ></app-list>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-client-form-templates',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        templates: {
+          type: Array,
+          default: [],
+          watch(templates) {
+            this._templates = this._wrapTemplates(templates);
+          },
+        },
+        _templates: [],
+      },
+      _wrapTemplates(templates) {
+        return templates.map(t => this._wrapTemplate(t));
+      },
+      _wrapTemplate(template) {
+        return {
+          label: template.name,
+          template,
+        };
+      },
+
+      selectTemplate(template) {
+        this.fire('select-template', template);
+      },
+    });
+  </script>
+</oda-module>

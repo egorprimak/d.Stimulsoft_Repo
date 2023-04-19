@@ -1,0 +1,127 @@
+<link href="../../../../../../C:1D6EE3EE7BFC08A/~/client/lib/list.html" rel="import">
+<link href="../../../../../../C:1D6EE3EE7BFC08A/~/client/lib/button.html" rel="import">
+<link href="report-template-chooser-item.html" rel="import">
+
+<oda-module id="report-template-chooser">
+  <template>
+    <style>
+      :host {
+        display: block;
+        min-width: 500px;
+        max-width: 100%;
+      }
+
+      p {
+        padding: 10px;
+        margin: 0;
+      }
+
+      .layout {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        border-radius: 0;
+      }
+
+      .list {
+        flex: 1;
+        max-height: 80vh;
+      }
+
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid #eaeaea;
+      }
+
+      .tab {
+        flex: 1;
+        border: none;
+        outline: none;
+        border-radius: 0;
+      }
+    </style>
+    <div class="layout" v-if="context">
+      <div class="tabs">
+        <app-button
+            v-for="tab of tabs"
+            class="tab"
+            :type="tab.key === _activeTabKey ? 'default' : 'normal'"
+            @click="_selectTab(tab.key)"
+        >{{ tab.text }}</app-button>
+      </div>
+      <div class="layout" style="flex: 1" v-if="_templates && _templates.length > 0">
+        <app-list
+            :items.prop="_templates"
+            @open-template="open($event.detail.value)"
+            class="list"
+            item-template="report-template-chooser-item"
+        ></app-list>
+      </div>
+      <p v-else>Шаблоны не найдены</p>
+      <app-button @click="open()" class="btn" type="default" v-if="showBlankButton">
+        Открыть без шаблона
+      </app-button>
+    </div>
+    <p v-else>Класс не указан</p>
+  </template>
+  <script>
+    ODA({
+      is: 'report-template-chooser',
+      properties: {
+        tabs: {
+          type: Array,
+          default: () => [
+            { key: 'report', text: 'Отчеты' }
+          ],
+        },
+        needDashboardsFunctional: false,
+        designer: Object,
+        context: {
+          type: Object,
+          watch(ctx) {
+            if (!ctx) {
+              return;
+            }
+            if (this.needDashboardsFunctional) {
+              this.tabs.push({ key: 'dashboard', text: 'Дашборды' });
+            }
+          }
+        },
+        templates: [],
+        _templates: [],
+        result: Object,
+        showBlankButton: true,
+
+        _activeTabKey: 'report',
+      },
+      observers: [
+        function templatesOfTabChange(templates, _activeTabKey) {
+          if (!Array.isArray(templates)) {
+            this._templates = [];
+            return;
+          }
+          this._templates = templates.filter(t => t.type === _activeTabKey);
+        }
+      ],
+      attached() {
+        const { domHost } = this;
+        domHost.title = 'Выбор шаблона';
+        domHost.buttons = ['Cancel'];
+        setTimeout(() => {
+          domHost.rightButtons = [];
+          domHost.leftButtons = [];
+        }, 100);
+      },
+      open(template = null) {
+        this.result = { template, context: this.context.fullId, type: this._activeTabKey };
+        this.domHost.close();
+      },
+      _selectTab(key) {
+        this._activeTabKey = key;
+      },
+    });
+  </script>
+</oda-module>

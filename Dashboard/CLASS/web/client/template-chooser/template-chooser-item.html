@@ -1,0 +1,24 @@
+<oda-module id="sti-template-chooser-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px 10px;
+      }
+    </style>
+    <div @click="onClick()" v-if="item">
+      {{ item.label }}
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'sti-template-chooser-item',
+      properties: {
+        item: Object,
+      },
+      onClick() {
+        this.fire('select-template', this.item);
+      },
+    });
+  </script>
+</oda-module>

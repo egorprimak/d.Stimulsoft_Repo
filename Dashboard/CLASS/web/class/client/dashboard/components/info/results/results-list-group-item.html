@@ -1,0 +1,203 @@
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+
+<oda-module id="report-results-list-group-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+        background-color: #fff;
+      }
+
+      .wrapper {
+        margin: 0 -5px;
+        border-left: 1px dashed transparent;
+      }
+
+      .wrapper.opened {
+        border-color: #c8c8c8;
+      }
+
+      .detail {
+        display: flex;
+        align-items: center;
+        padding-right: 5px;
+        user-select: none;
+      }
+
+      .status {
+        line-height: 0;
+        margin-right: 5px;
+      }
+
+      .date {
+        margin-left: 10px;
+        opacity: .8;
+        font-size: .8em;
+        margin-right: 10px;
+        white-space: nowrap;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .label {
+        width: 100%;
+        margin-right: 10px;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .author {
+        color: #0375ff;
+      }
+
+      .d-flex {
+        display: flex;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .list {
+        margin-top: 5px;
+      }
+    </style>
+    <div v-if="item" class="wrapper" :class="{ opened: opened }">
+      <div class="detail">
+        <action-btn @click="opened = !opened" style="border-radius: 3px">
+          <div style="display: flex">
+            <material-icon v-show="opened" icon="expand_less"></material-icon>
+            <material-icon v-show="!opened" icon="expand_more"></material-icon>
+            <div style="line-height: 1.5">{{ label }}</div>
+          </div>
+        </action-btn>
+        <div class="spacer"></div>
+        <div class="actions">
+          <action-btn class="item" title="Загрузить все сформированные отчеты" @click="download()">
+            <material-icon icon="get_app"></material-icon>
+          </action-btn>
+          <action-btn class="item" active-color="red" title="Удалить группу" @click="remove()">
+            <material-icon icon="delete"></material-icon>
+          </action-btn>
+        </div>
+      </div>
+      <app-list class="list" v-show="opened" :focused-state-enabled.prop="false" :hover-state-enabled.prop="true"
+                :items.prop="results"
+                :item-template="list._resultItemTemplate" :no-data-text.prop="list.noDataText"></app-list>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-results-list-group-item',
+      extends: 'common-service',
+      properties: {
+        item: Object,
+        contextItem: {
+          type: Object,
+          get() {
+            return this.item && this.item.contextItem;
+          },
+        },
+        results: {
+          type: Array,
+          get() {
+            return this.item && this.item.results || null;
+          },
+        },
+        key: {
+          type: String,
+          get() {
+            return this.item && this.item.result || null;
+          },
+        },
+        label: {
+          type: String,
+          get() {
+            return this.item && this.item.label || null;
+          },
+        },
+        date: {
+          type: String,
+          get() {
+            if (!this.item) {
+              return null;
+            }
+            const date = new Date(this.item.date);
+            return date.toLocaleDateString('ru') + ' ' + date.toLocaleTimeString('ru');
+          },
+        },
+        isAuthor: {
+          type: Boolean,
+          get() {
+            return !!(this.item && this.contextItem && this.item.userId === this.contextItem.userId);
+          },
+        },
+        list: {
+          type: Object,
+          get() {
+            return this.item && this.item.list || null;
+          },
+        },
+        opened: false,
+        _deleting: false,
+        _downloading: false,
+        _lnkCopied: false,
+        _lnkReady: true,
+      },
+      isShowRemoveButton() {
+        return !!(this.list && this.list.showRemoveButton);
+      },
+      isMarkAuthor() {
+        return !!(this.list && this.list.markAuthor);
+      },
+      isAllowDownload() {
+        return !!(this.list && this.list.allowDownload);
+      },
+      isAllowOpenSourceData() {
+        return !!(this.list && this.list.allowOpenSourceData);
+      },
+      isAllowOpenObject() {
+        return !!(this.list && this.list.allowOpenObject);
+      },
+      remove() {
+        const confirmMsg = `Вы уверены, что хотите удалить все элементы в группе "${this.label}"?\n` +
+          'Отменить данное действие будет невозможно!';
+        if (!confirm(confirmMsg)) {
+          return;
+        }
+        this._removeResults(this.results.map(r => r.result.oid));
+        this.fire('remove-result', this.item);
+      },
+      async download() {
+        const repository = await this._getResultsClass()
+        const resultField = await this._getFieldOfClass('result', repository);
+        for (const result of this.results) {
+          const resultObject = await repository.getObject(result.result.oid);
+          const fileObject = await resultField.getValue(resultObject, resultObject.Root);
+          const fileName = `${resultObject.name}.${fileObject.ext}`;
+          const fileUrl = `/api${fileObject.fullId}?method=download&to=${fileName}`;
+          const link = document.createElement('a');
+          link.setAttribute('href', fileUrl);
+          link.setAttribute('download', fileName || 'download');
+          link.click();
+        }
+      },
+    });
+  </script>
+</oda-module>

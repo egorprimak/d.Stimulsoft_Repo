@@ -1,0 +1,250 @@
+<link href="../../../../lib/list.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="dashboard-list-item.html" rel="import">
+
+<oda-module id="report-dashboards">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      action-btn + .action-item,
+      .action-item + action-btn,
+      action-btn + action-btn {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+    </style>
+    <header class="panel">
+      <h4 class="title">Макеты <span class="count" v-if="count > 0">[{{count}}]</span></h4>
+      <div class="actions">
+        <action-btn @click="update()" title="Обновить" v-if="!_updating">
+          <material-icon icon="update"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="create()" title="Создать" v-if="!_creating">
+          <material-icon icon="add_box"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="removeAll()" active-color="red" title="Удалить все" v-if="!_removing">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader action-item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </header>
+    <div class="layout" v-if="ready">
+      <p class="error" v-if="error">
+        {{ error && error.message || 'Unknown error' }}
+      </p>
+      <div class="layout" v-else>
+        <app-list
+            :focused-state-enabled.prop="false"
+            :hover-state-enabled.prop="false"
+            :items.prop="dashboards"
+            @remove-dashboard="_remove($event.detail.value)"
+            item-template="report-dashboard-list-item"
+            no-data-text="Макеты не найдены"
+            ref="list"
+        ></app-list>
+        <ul class="hints" v-if="$refs.list && !$refs.list.noItems">
+          <li>Двойной клик по имени для переименования</li>
+          <li>Синим цветом отмечены ваши макеты</li>
+        </ul>
+      </div>
+    </div>
+    <div v-else>
+      <loading-spinner size="40"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-dashboards',
+      extends: 'common-service',
+      properties: {
+        ready: false,
+        error: null,
+        dashboards: [],
+        report: Object,
+        contextItem: Object,
+        count: {
+          type: Number,
+          get() {
+            return Array.isArray(this.dashboards) ? this.dashboards.length : 0;
+          },
+        },
+        _updating: false,
+        _creating: false,
+        _removing: false,
+        _changeHandler: Function,
+        _index: null,
+      },
+      observers: [
+        async function contextItemOrReportChange(contextItem, report) {
+          await this._initComponent();
+        },
+      ],
+
+      create() {
+        const name = prompt('Введите название дашборда', 'Новый макет');
+        if (name === null || !name.trim()) {
+          return;
+        }
+        this._creating = true;
+        this._createDashboard(this.report, name)
+          .then(async (dashboard) => {
+            await this._addDashboardOdaObject(dashboard);
+          })
+          .finally(() => {
+            this._creating = false;
+          });
+      },
+
+      removeAll() {
+        if (confirm('Вы уверены, что хотите удалить все шаблоны?')) {
+          this._removeAll();
+        }
+      },
+
+      update() {
+        const start = performance.now();
+        this._updating = true;
+        this._loadData().finally(() => {
+          const finish = performance.now();
+          const delay = Math.max(1000 - finish + start, 0);
+          setTimeout(() => {
+            this._updating = false;
+          }, delay);
+        });
+      },
+
+      async _initComponent() {
+        this.ready = false;
+        this.error = null;
+        this._reset();
+        try {
+          await this._loadData();
+        } catch (err) {
+          this.error = err;
+        }
+        this.ready = true;
+      },
+
+      _reset() {
+        this.dashboards = [];
+      },
+
+      async _loadData() {
+        const [repository, dashboards] = await Promise.all([
+          this._getDashboardsClass(),
+          this._getDashboards(this.report),
+        ]);
+        this.dashboards = this._wrapDashboards(dashboards, repository);
+      },
+
+      _removeAll() {
+        this._removing = true;
+        const dashboards = this.dashboards.map(i => i.dashboard);
+        this._removeDashboards(dashboards)
+          .then((res) => {
+            if (res) {
+              this.dashboards = [];
+            }
+          })
+          .finally(() => {
+            this._removing = false;
+          });
+      },
+
+      async _remove(dashboard) {
+        const idx = this.dashboards.findIndex(i => i.dashboard === dashboard);
+        if (idx !== -1) {
+          this.dashboards.splice(idx, 1);
+          await this._removeDashboard(dashboard);
+        }
+      },
+
+      async _addDashboardOdaObject(dashboard) {
+        const repository = await this._getDashboardsClass();
+        this.dashboards.unshift(this._wrapDashboard(dashboard.Root, repository));
+      },
+
+      _wrapDashboards(dashboards, repository) {
+        return dashboards.map(t => this._wrapDashboard(t, repository));
+      },
+
+      _wrapDashboard(dashboard, repository) {
+        return {
+          label: dashboard.name,
+          dashboard,
+          repository,
+          report: this.report,
+          contextItem: this.contextItem,
+        };
+      },
+    });
+  </script>
+</oda-module>

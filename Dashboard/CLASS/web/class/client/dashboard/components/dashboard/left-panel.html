@@ -1,0 +1,105 @@
+<link href="../../../lib/divider.html" rel="import">
+<link href="../../../lib/loading-spinner.html" rel="import">
+<link href="../common.html" rel="import">
+<link href="../reports-list/reports-list.html" rel="import">
+
+<oda-module id="dashboard-left-panel">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        flex-basis: 400px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, .3);
+        z-index: 1;
+        min-width: 300px;
+        width: 100%;
+        max-width: 25%;
+      }
+
+      .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 10px;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .list {
+        flex: 1;
+        margin-top: 5px;
+      }
+
+      .button {
+        border-radius: 0;
+        width: 100%;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+    </style>
+    <header class="head" v-if="adminMode">
+      <h3 class="title">Навигатор</h3>
+      <div class="actions">
+        <action-btn @click="update()" class="item" title="Обновить" v-if="!_updating">
+          <material-icon icon="update"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </header>
+    <app-divider v-if="adminMode"></app-divider>
+    <reports-list
+        :admin-mode.prop="adminMode"
+        :reports.prop="reports"
+        class="list"
+    ></reports-list>
+    <app-button
+        @click="_openDesigner()"
+        class="button"
+        icon="launch"
+        title="Открыть дизайнер без контекста"
+        type="default"
+        v-if="adminMode"
+    >Дизайнер
+    </app-button>
+  </template>
+  <script>
+    ODA({
+      is: 'dashboard-left-panel',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        reports: [],
+        _updating: false,
+        adminMode: false,
+      },
+      update() {
+        this._updating = true;
+        this.fire('update-reports-list');
+        setTimeout(() => {
+          this._updating = false;
+        }, 1000);
+      },
+    });
+  </script>
+</oda-module>

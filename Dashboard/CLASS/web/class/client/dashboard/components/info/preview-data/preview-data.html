@@ -1,0 +1,271 @@
+<link href="../../common.html" rel="import">
+
+<oda-module id="report-preview-data">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 15px;
+      }
+
+      .layout {
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .count {
+        color: #c1c1c1;
+        font-weight: normal;
+      }
+
+      .subtitle {
+        font-size: 14px;
+        padding: 0 5px;
+        margin: 0 0 15px 0;
+      }
+
+      .record {
+        display: flex;
+        align-items: center;
+      }
+
+      .record material-icon {
+        margin-right: 5px;
+        line-height: 0;
+      }
+    </style>
+    <div class="panel">
+      <h4 class="title">Данные для предпросмотра</h4>
+      <div class="actions" v-if="_ready">
+        <action-btn @click="update()" class="item" title="Обновить данные" v-if="!_deleting && !_updating">
+          <material-icon icon="refresh"></material-icon>
+        </action-btn>
+        <div class="loader item" v-if="!_deleting && _updating">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+        <action-btn @click="remove()" active-color="red" class="item" title="Удалить" v-if="count > 0 && !_deleting">
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else-if="_deleting">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+    </div>
+    <p class="subtitle">Данные для предпосмотра в дизайнере шаблонов</p>
+    <div class="layout" v-if="_ready">
+      <div class="record" v-if="!_updating">
+        <material-icon :icon="_statusIcon" :style="{ color: _statusColor }" size="20"></material-icon>
+        <div class="status">Набор данных {{ count > 0 ? 'сгенерирован' : 'не сгенерирован' }}</div>
+        <div class="count" v-show="count > 0">&nbsp;(Объектов: {{count}})</div>
+      </div>
+      <div class="record" v-else>
+        <material-icon icon="watch_later" size="20"></material-icon>
+        <div class="status">Набор данных генерируется</div>
+      </div>
+    </div>
+    <div v-else>
+      <loading-spinner size="40"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-preview-data',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        _ready: false,
+        _deleting: false,
+        _updating: false,
+        count: 0,
+        _statusIcon: {
+          type: String,
+          get() {
+            return this.count > 0 ? 'check_circle' : 'warning';
+          },
+        },
+        _statusColor: {
+          type: String,
+          get() {
+            return this.count > 0 ? '#5cb85c' : '#e29300';
+          },
+        },
+      },
+      observers: [
+        function dataSoruceChange(contextItem, report) {
+          this._loadData();
+        },
+      ],
+      _loadData() {
+        if (!this.contextItem || !this.report) {
+          this.count = 0;
+          this._ready = true;
+          return;
+        }
+        this._ready = false;
+
+        this.report.objectCount
+          .catch(() => 0)
+          .then((count) => {
+            this.count = count;
+          })
+          .finally(() => {
+            this._ready = true;
+          });
+      },
+      update() {
+        const msg = 'Вы уверены, что хотите обновить данные для предпросмотра?\n' +
+          'Предыдущий набор данных будет удален!';
+
+        if (this.count > 0 && !confirm(msg)) {
+          return;
+        }
+
+        this._updating = true;
+        this._truncate()
+          .then(() => {
+            this.count = 0;
+          })
+          .then(() => this._generateObjects())
+          .catch((err) => {
+            alert(err);
+            return 0;
+          })
+          .then((count) => {
+            this.count = count;
+          })
+          .finally(() => {
+            this._updating = false;
+          });
+      },
+      remove() {
+        if (this.count === 0) {
+          return;
+        }
+
+        const msg = 'Вы уверены, что хотите очистить набор данных для предпросмотра?';
+
+        if (!confirm(msg)) {
+          return;
+        }
+
+        this._deleting = true;
+        this._truncate().finally(() => {
+          this.count = 0;
+          this._deleting = false;
+        });
+      },
+
+      async _truncate() {
+        const queryResult = await this.report.XQuery('string-join(x/O/@oid, " ")');
+        const oids = Array.isArray(queryResult) && queryResult[0] || '';
+
+        if (!oids) {
+          return;
+        }
+        await this.report.removeObjects(oids);
+      },
+
+      async _generateObjects() {
+        const structure = await this.report.$STATIC.$object;
+
+        if (!String(structure.Root.querySource).trim()) {
+          throw new Error('Не указан источник запроса');
+        }
+
+        const querySource = await this.contextItem.$base.findItem(structure.Root.querySource);
+
+        if (!querySource) {
+          throw new Error('Источник запроса не найден');
+        }
+
+        let data;
+
+        try {
+          data = await this._getInputParametersForReport(this.report);
+        } catch {
+          return this.count;
+        }
+
+        const query = this._prepareQuery(String(structure.Root.query || ''), data, this.report);
+
+        if (!query) {
+          throw new Error('Пустой запрос');
+        }
+
+        const resultOfQuery = await querySource.XQuery(query);
+
+        if (resultOfQuery === null) {
+          throw new Error('Ошибка при выполнении запроса');
+        }
+
+        const items = this._getObjectsFromResult(resultOfQuery);
+        const cid = this.report.id;
+        const bid = this.report.$base.id;
+
+        if (items.length > 0) {
+          for (const item of items) {
+            if (!!item && typeof item === 'object') {
+              item['bid'] = bid;
+              item['cid'] = cid;
+            }
+          }
+          
+          const objects = { $OBJECTS: [{ $OBJECT: items }] };
+          await this.report.API.POST('save_objects', undefined, JSON.stringify(objects));
+        }
+
+        return items.length;
+      },
+    });
+  </script>
+</oda-module>

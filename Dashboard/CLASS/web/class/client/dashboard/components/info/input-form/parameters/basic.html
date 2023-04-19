@@ -1,0 +1,410 @@
+<oda-module id="report-input-form-parameter-basic">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-flow: row wrap;
+        align-items: center;
+        padding-right: 19px;
+        position: relative;
+      }
+
+      .notify-place {
+        width: 16px;
+        height: 16px;
+        display: flex;
+        place-content: center;
+        place-items: center;
+        line-height: 0;
+        margin-right: 3px;
+      }
+
+      .layout {
+        flex: 1;
+        display: flex;
+        flex-flow: row wrap;
+        align-items: center;
+      }
+
+      .label {
+        flex: 1;
+        overflow: auto !important;
+        white-space: normal !important;
+        text-overflow: ellipsis !important;
+      }
+
+      .error {
+        color: red;
+      }
+
+      .input {
+        padding: 4px;
+        border: 1px solid #676767;
+        border-radius: 3px;
+        font: inherit;
+        outline: none;
+        width: 300px;
+        box-sizing: border-box;
+      }
+
+      .input[type='date'], .input[type='datetime-local'] {
+        padding: 1.6px;
+      }
+
+      .select-box,
+      .input-wrapper {
+        width: 300px;
+      }
+    </style>
+    <div class="dev-actions" v-if="devMode">
+      <action-btn
+          v-if="isParameterValueIsQuery()"
+          active-color="red"
+          title="Посмотреть XML"
+          @click="viewXML()"
+      >
+        <material-icon icon="code"></material-icon>
+      </action-btn>
+    </div>
+    <div class="notify-place">
+      <material-icon :title="_error" class="error" icon="error" size="16" v-if="_error"></material-icon>
+      <loading-spinner size="16" v-else-if="_loading"></loading-spinner>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-basic',
+      extends: 'common-service',
+      properties: {
+        devMode: false,
+        parameter: {
+          type: Object,
+          watch(parameter) {
+            this.update();
+            this.updateVisibility();
+          },
+        },
+        parameters: [],
+        items: [],
+        item: {
+          type: Object,
+          watch(item) {
+            if (!!item) {
+              item.getValue = this.getValue.bind(this);
+              item.emitValueChange = this.onParameterValueChange.bind(this);
+            }
+          },
+        },
+        contextItem: Object,
+        value: {
+          type: Object,
+          default: undefined,
+          watch(v) {
+            this.item.value = v;
+          },
+        },
+        valueVariants: [],
+        _loading: true,
+        _error: {
+          type: String,
+          default: null,
+        },
+
+        selectionMode: {
+          type: String,
+          get() {
+            return this.isParameterList() ?
+              this.isMultiSelect() ? 'multiple' : 'single'
+              : 'none';
+          },
+        },
+        inputType: 'text',
+      },
+      observers: [
+        function valueChanged(value) {
+          this.fire('parameter-value-change', {
+            parameter: this.parameter,
+            value,
+          });
+        },
+      ],
+      isParameterList() {
+        return ODANT.getBool(!!this.parameter && this.parameter.isList);
+      },
+      isMultiSelect() {
+        return ODANT.getBool(!!this.parameter && this.parameter.multiSelect);
+      },
+      getParameterOptions() {
+        return this.parameter && this.parameter.$options && this.parameter.$options[0] || null;
+      },
+      getParameterValue() {
+        const options = this.getParameterOptions();
+
+        if (!options || options.value === undefined) {
+          return this.getDefaultValue();
+        }
+
+        const optionsValue = options.value;
+
+        if (this.isParameterList()) {
+          return String(optionsValue).split('\n').filter(i => !!i.trim());
+        }
+
+        return optionsValue;
+      },
+      getParameterValueQuery() {
+        const options = this.getParameterOptions();
+        return options && options.valueQuery || null;
+      },
+      getParameterSourceQuery() {
+        const options = this.getParameterOptions();
+        return options && options.sourceQuery || null;
+      },
+      isParameterValueIsQuery() {
+        const options = this.getParameterOptions();
+        return ODANT.getBool(!!options && options.valueIsQuery);
+      },
+      getDefaultValue() {
+        return null;
+      },
+      getDependenciesNames() {
+        const query = this.getParameterValueQuery();
+        if (!query) {
+          return [];
+        }
+        const matches = query.match(/\[#[-_$%&@^*"'|.A-Z0-9]*#]/ig);
+        return matches && prepareMathces(matches) || [];
+
+        function prepareMathces(matches) {
+          const names = matches.map(m => String(m).slice(2, -2));
+          const uniqueNames = new Set(names);
+          return Array.from(uniqueNames);
+        }
+      },
+      getVisibilityDependenciesNames() {
+        const query = this.getParameterVisibilityQuery();
+        if (!query) {
+          return [];
+        }
+        const matches = query.match(/\[#[-_$%&@^*"'|.A-Z0-9]*#]/ig);
+        return matches && prepareMathces(matches) || [];
+
+        function prepareMathces(matches) {
+          const names = matches.map(m => String(m).slice(2, -2));
+          const uniqueNames = new Set(names);
+          return Array.from(uniqueNames);
+        }
+      },
+      getDependencies() {
+        return this.getDependenciesNames().map(n => this.getParameterByName(n));
+      },
+      getVisibilityDependencies() {
+        return this.getVisibilityDependenciesNames().map(n => this.getParameterByName(n));
+      },
+      getParameterByName(name) {
+        if (!this.parameters || !Array.isArray(this.parameters)) {
+          return null;
+        }
+        return this.parameters.find(p => p.name === name);
+      },
+      getPreparedQuery() {
+        let query = this.getParameterValueQuery();
+        if (!query) {
+          return '';
+        }
+        const dependencies = this.getDependenciesNames();
+        const values = this.getItemsValues();
+
+        const prepare = v => String(v).replaceAll('"', '&quot;');
+        const getValue = dep => {
+          const v = values[dep];
+          if (Array.isArray(v)) {
+            const items = v.map(({ key, value }) => `<item key="${prepare(key)}" value="${prepare(value)}"/>`).join('');
+            return `<list>${items}</list>`;
+          }
+          if (v === null) {
+            return '';
+          }
+          return prepare(v);
+        };
+
+        for (const dep of dependencies) {
+          query = query.replaceAll(`[#${dep}#]`, getValue(dep));
+        }
+        query = query
+          .replaceAll('[%user_id%]', this.contextItem.userId)
+          .replaceAll('[%host_id%]', this.contextItem.$host.id);
+        return query;
+      },
+
+      getReport() {
+        return this.item && this.item.report || null;
+      },
+
+      getParameterVisibilityQuery() {
+        const options = this.getParameterOptions();
+        return options && options.visibilityQuery || null;
+      },
+      getPreparedVisibilityQuery() {
+        let query = this.getParameterVisibilityQuery();
+        if (!query) {
+          return '';
+        }
+        const dependencies = this.getVisibilityDependenciesNames();
+        const values = this.getItemsValues();
+
+        const prepare = v => String(v).replaceAll('"', '&quot;');
+        const getValue = dep => {
+          const v = values[dep];
+          if (Array.isArray(v)) {
+            const items = v.map(({ key, value }) => `<item key="${prepare(key)}" value="${prepare(value)}"/>`).join('');
+            return `<list>${items}</list>`;
+          }
+          if (v === null) {
+            return '';
+          }
+          return prepare(v);
+        };
+
+        for (const dep of dependencies) {
+          query = query.replaceAll(`[#${dep}#]`, getValue(dep));
+        }
+        query = query
+          .replaceAll('[%user_id%]', this.contextItem.userId)
+          .replaceAll('[%host_id%]', this.contextItem.$host.id);
+        return query;
+      },
+
+      getItemsValues() {
+        return this.item.getItemsValues();
+      },
+
+      async getValueOfQuery() {
+        if (this.isParameterValueIsQuery()) {
+          const source = this.getParameterSourceQuery();
+          if (!source) {
+            return this.getDefaultValue();
+          }
+          return ODANT.findItem(source)
+            .catch(() => {
+              throw new Error('Ошибка при получении источника данных');
+            })
+            .then((sourceItem) => sourceItem.XQuery(this.getPreparedQuery())
+              .then((result) => {
+                if (result === null) {
+                  throw new Error();
+                }
+                return this.processQueryResult(result);
+              })
+              .catch(() => {
+                throw new Error('Ошибка при получении данных');
+              }),
+            );
+        } else {
+          return this.getParameterValue();
+        }
+      },
+
+      async getVisibilityValue() {
+        const query = this.getPreparedVisibilityQuery();
+        const report = this.getReport();
+        if (!query || !report) {
+          return true;
+        }
+        const result = await this._xquery(report, query);
+        return String(result).trim().toLowerCase() === 'true';
+      },
+
+      processQueryResult(result) {
+        return this.basicProcessQueryResult(result);
+      },
+
+      basicProcessQueryResult(result) {
+        if (result === null || result === undefined) {
+          return this.isParameterList() ? [] : this.getDefaultValue();
+        }
+        if (typeof result === 'object' && !Array.isArray(result) && this.isParameterList()) {
+          const processItem = i => ({
+            key: i.key,
+            label: i.value,
+            source: i,
+          });
+          return result && result.$list
+            && result.$list[0]
+            && Array.isArray(result.$list[0].$item)
+            && result.$list[0].$item.map(processItem)
+            || [];
+        } else {
+          if (this.isParameterList()) {
+            const processItem = i => ({
+              key: i,
+              label: i,
+              source: i,
+            });
+            const value = String(result[0]);
+            return value.split('\n').filter(i => !!i.trim()).map(processItem);
+          }
+
+          if (Array.isArray(result)) {
+            return String(result[0]);
+          }
+
+          return this.getDefaultValue();
+        }
+      },
+
+      update() {
+      },
+
+      async updateVisibility() {
+        this.item.hidden = !(await this.getVisibilityValue());
+      },
+
+      getValue() {
+        return this.value === undefined || this.value === null ? this.getDefaultValue() : this.value;
+      },
+
+      onParameterValueChange(parameter) {
+        if (this.isParameterList() && this.isParameterValueIsQuery()) {
+          const deps = this.getDependenciesNames();
+          if (deps.includes(parameter.name)) {
+            this.update();
+          }
+        }
+        const visibilityDeps = this.getVisibilityDependenciesNames();
+        if (visibilityDeps.includes(parameter.name)) {
+          this.updateVisibility();
+        }
+      },
+
+      async viewXML() {
+        try {
+          try {
+            const result = await this.getXML();
+            this._showXML(result).then();
+          } catch (err) {
+            this._showError(err, 'Ошибка выполнения запроса').then();
+          }
+        } catch (err) {
+          alert(String(err));
+        }
+      },
+
+      getXML() {
+        if (this.isParameterValueIsQuery()) {
+          const source = this.getParameterSourceQuery();
+          if (!source) {
+            throw new Error('Источник данных запроса не указан');
+          }
+          return ODANT.findItem(source)
+            .catch(() => {
+              throw new Error('Ошибка при получении источника данных');
+            })
+            .then((sourceItem) => sourceItem.XQuery(this.getPreparedQuery(), { format: 'xml' }));
+        } else {
+          throw new Error('Значение не является запросом');
+        }
+      },
+    });
+  </script>
+</oda-module>

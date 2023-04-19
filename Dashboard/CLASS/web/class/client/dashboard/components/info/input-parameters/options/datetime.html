@@ -1,0 +1,147 @@
+<link href="/web/lib/code-mirror/code-mirror.html" rel="import">
+<link href="other.html" rel="import">
+
+<oda-module id="parameter-detail-datetime">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .option.default-value .editor label {
+        display: inline-flex;
+        align-items: center;
+      }
+    </style>
+    <ul class="hints">
+      <li>Возвращаемые значения должны быть представлены в формате:</li>
+      <li>ISO: {{dateNow}}</li>
+      <li>Сокращенно: {{dateNowShort}}</li>
+    </ul>
+    <div class="option default-value">
+      <div class="label">
+        {{list ? 'Значения' : 'Значение'}}
+        (<label>запрос <input type="checkbox" v-model="valueIsQuery"></label>)
+      </div>
+      <div class="complex-editor" v-if="valueIsQuery && list">
+        <div class="option inset">
+          <div class="label">Источник запроса:</div>
+          <div class="editor flex-1">
+            <input class="w-100" type="text" v-model="sourceQuery">
+          </div>
+        </div>
+        <div class="code-editor-wrapper">
+          <oda-code-mirror ::value.prop="valueQuery" class="code-editor" mode="xquery" ref="editor">
+          </oda-code-mirror>
+        </div>
+        <ul class="hints">
+          <li>Варианты возврата элементов:</li>
+          <li>1) текст, каждый элемент с новой строки (пустые строки игнорируются)</li>
+          <li>2) &lt;list&gt; &lt;item key=&quot;key_string&quot; value=&quot;value_string&quot;/&gt; &lt;/list&gt;
+          </li>
+        </ul>
+      </div>
+      <div class="complex-editor" v-else-if="list">
+        <div class="code-editor-wrapper">
+          <oda-code-mirror ::value.prop="value" class="code-editor" ref="editor">
+          </oda-code-mirror>
+        </div>
+        <ul class="hints" v-if="list">
+          <li>Перечислите элементы с новой строки (пустые строки игнорируются)</li>
+        </ul>
+      </div>
+      <div class="complex-editor" v-else>
+        <div class="option inset" v-if="valueIsQuery">
+          <div class="label">Источник запроса:</div>
+          <div class="editor flex-1">
+            <input class="w-100" type="text" v-model="sourceQuery">
+          </div>
+        </div>
+        <div class="code-editor-wrapper">
+          <oda-code-mirror ::value.prop="valueQuery" class="code-editor" mode="xquery" ref="editor" v-if="valueIsQuery">
+          </oda-code-mirror>
+          <oda-code-mirror ::value.prop="value" class="code-editor" ref="editor" v-else>
+          </oda-code-mirror>
+        </div>
+      </div>
+      <ul class="hints">
+        <li>Многострочный текст будет приведен к одной строке</li>
+      </ul>
+    </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'parameter-detail-datetime',
+      extends: 'parameter-detail-other',
+      properties: {
+        list: false,
+        options: Object,
+        value: '',
+        valueIsQuery: false,
+        valueQuery: '',
+        sourceQuery: '',
+        dateNow: '',
+        dateNowShort: '',
+      },
+      observers: [
+        function optionsChange(options) {
+          this.reset();
+          this.applyChanges();
+        },
+        function dataChangedValue(value) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedValueIsQuery(valueIsQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedValueQuery(valueQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedSourceQuery(sourceQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+      ],
+      attached() {
+        const date = new Date().toISOString();
+        this.dateNow = date;
+        this.dateNowShort = date.slice(0, 10);
+      },
+      isEdited() {
+        const d = this.options || {};
+        const valueEdited = this.value !== d.value;
+        const valueIsQueryEdited = this.valueIsQuery !== ODA.getBool(d.valueIsQuery);
+        const valueQueryEdited = this.valueQuery !== d.valueQuery;
+        const sourceQueryEdited = this.sourceQuery !== d.sourceQuery;
+        return valueEdited || valueIsQueryEdited || valueQueryEdited || sourceQueryEdited;
+      },
+      applyChanges() {
+        if (!this.options) {
+          this.options = {};
+        }
+        Object.assign(this.options, {
+          value: this.value,
+          valueQuery: this.valueQuery,
+          valueIsQuery: this.valueIsQuery,
+          sourceQuery: this.sourceQuery,
+        });
+        this.reset();
+        this.fire('detail-edited', this.isEdited());
+      },
+      reset() {
+        if (!this.options) {
+          this.value = null;
+          this.valueIsQuery = false;
+          this.valueQuery = '';
+          this, sourceQuery = '';
+        } else {
+          const { options: d } = this;
+          this.value = d.value;
+          this.valueIsQuery = ODANT.getBool(d.valueIsQuery);
+          this.valueQuery = d.valueQuery || '';
+          this.sourceQuery = d.sourceQuery || '';
+        }
+      },
+    });
+  </script>
+</oda-module>

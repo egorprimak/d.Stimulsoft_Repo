@@ -1,0 +1,93 @@
+<link href="../../common.html" rel="import">
+<link href="../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../lib/list.html" rel="import">
+<link href="parameter-list-item.html" rel="import">
+
+<oda-module id="report-input-form-parameters">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+    </style>
+    <div v-if="ready">
+      <app-list
+          :focused-state-enabled.prop="false"
+          :items.prop="items"
+          @parameter-value-change="onParameterValueChange($event)"
+          item-template="report-input-form-parameter-list-item"
+      ></app-list>
+    </div>
+    <loading-spinner size="40" v-else></loading-spinner>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameters',
+      extends: 'common-service',
+      properties: {
+        devMode: false,
+        contextItem: Object,
+        report: Object,
+        items: [],
+        ready: {
+          type: Boolean,
+          default: false,
+          notify: true,
+        },
+      },
+      observers: [
+        function dataSourceChange(contextItem, report) {
+          this._loadData();
+        },
+      ],
+      _loadData() {
+        if (!this.contextItem || !this.report) {
+          this.items = [];
+          return;
+        }
+        this.ready = false;
+
+        this._getParametersOfReport(this.report)
+          .then(params => {
+            const items = params.map(p => this._parameterToItem(p, params));
+            for (const item of items) {
+              item.items = items;
+              item.getItemsValues = this.getItemsValues.bind(this);
+            }
+            this.items = items;
+          })
+          .finally(() => {
+            this.ready = true;
+          });
+      },
+      _parameterToItem(p, parameters) {
+        return {
+          parameter: p,
+          parameters,
+          contextItem: this.contextItem,
+          value: undefined,
+          devMode: this.devMode,
+          emitValueChange() {
+          },
+          hidden: false,
+          report: this.report,
+        };
+      },
+      getItemsValues() {
+        if (!Array.isArray(this.items)) {
+          return {};
+        }
+        return Object.fromEntries(this.items.map(i => [i.parameter.name, i.getValue ? i.getValue() : i.value]));
+      },
+      onParameterValueChange(e) {
+        if (e && e.detail && e.detail.value !== null && typeof e.detail.value === 'object') {
+          const { parameter, value } = e.detail.value;
+          for (const item of this.items) {
+            item.emitValueChange(parameter, value);
+          }
+        }
+        this.fire('change');
+      },
+    });
+  </script>
+</oda-module>

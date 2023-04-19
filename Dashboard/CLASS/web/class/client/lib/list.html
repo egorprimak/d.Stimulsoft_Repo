@@ -1,0 +1,318 @@
+<link href="material-icon/material-icon.html" rel="import">
+
+<oda-module id="app-list">
+  <template>
+    <style>
+      :host {
+        overflow: auto;
+      }
+
+      :host,
+      .container {
+        display: block;
+        height: 100%;
+      }
+
+      .item {
+        display: flex;
+        outline: none;
+        transition: .1s;
+        border-bottom: 1px solid #eaeaea;
+        align-items: center;
+      }
+
+      .item material-icon {
+        flex-shrink: 0;
+        margin-left: 5px;
+        line-height: 0;
+      }
+
+      .item *:last-child {
+        flex: 1;
+      }
+
+      .item:last-child {
+        border-bottom: none;
+      }
+
+      :host([hover-state-enabled]) .item:hover {
+        background-color: rgba(25, 71, 138, .1);
+      }
+
+      :host([focused-state-enabled]) .item:focus {
+        background-color: rgba(25, 71, 138, .2);
+      }
+
+      .group + .group {
+        margin-top: 10px;
+      }
+
+      .item.selected {
+        background-color: #19478a;
+      }
+
+      .selected {
+        color: #fff;
+      }
+
+      :host([hover-state-enabled]) .item.selected:hover,
+      :host([focused-state-enabled]) .item.selected:focus {
+        background-color: rgba(25, 71, 138, .9);
+      }
+
+      .no-data,
+      .no-data-item {
+        font-size: 12px !important;
+      }
+
+      .no-data-item {
+        padding: 0 10px;
+      }
+    </style>
+    <div class="container" v-if="grouped && !noData">
+      <div class="group" v-for="g of _items" v-if="g" v-show="!g.hidden">
+        <div :is="g.groupTemplate || groupTemplate" :item.prop="g"></div>
+        <div :class="{ 'selected': i.selected }" @click="_onClickToItem(i, $event)"
+             @keydown="$event.key === 'Enter' && _onClickToItem(i, $event)" class="item"
+             tabindex="0" v-for="i of g.items" v-show="!i.hidden">
+          <material-icon :icon="i.selected ? 'check_box' : 'check_box_outline_blank'"
+                         :size="selectionControlsSize"
+                         @click.stop="_onClickToItem(i, $event, true)"
+                         v-if="_allowSelect && showSelectionControls && _multiSelect"></material-icon>
+          <material-icon :icon="i.selected ? 'radio_button_checked' : 'radio_button_unchecked'"
+                         :size="selectionControlsSize"
+                         v-if="_allowSelect && showSelectionControls && selectionMode === 'single'"></material-icon>
+          <div :class="{ 'selected': i.selected }" :is="i.itemTemplate || itemTemplate" :item.prop="i"></div>
+        </div>
+        <p class="no-data-item" v-if="!g.items || g.items.length === 0">
+          {{ g.noDataText || _defaultNoDataText }}
+        </p>
+      </div>
+    </div>
+    <div class="container" v-if="!grouped && !noItems">
+      <div :class="{ 'selected': i.selected }" @click="_onClickToItem(i, $event)"
+           @keydown="$event.key === 'Enter' && _onClickToItem(i, $event)" class="item"
+           tabindex="0" v-for="i of _items" v-show="!i.hidden">
+        <material-icon :icon="i.selected ? 'check_box' : 'check_box_outline_blank'"
+                       :size="selectionControlsSize"
+                       @click.stop="_onClickToItem(i, $event, true)"
+                       v-if="_allowSelect && showSelectionControls && _multiSelect"></material-icon>
+        <material-icon :icon="i.selected ? 'radio_button_checked' : 'radio_button_unchecked'"
+                       :size="selectionControlsSize"
+                       v-if="_allowSelect && showSelectionControls && selectionMode === 'single'"></material-icon>
+        <div :class="{ 'selected': i.selected }" :is="i.itemTemplate || itemTemplate" :item.prop="i"></div>
+      </div>
+    </div>
+    <p class="no-data" v-if="!grouped && noItems || grouped && noData">{{ noDataText || _defaultNoDataText }}</p>
+  </template>
+  <script>
+    ODA({
+      is: 'app-list',
+      properties: {
+        focusedStateEnabled: {
+          default: true,
+          reflectToAttribute: true,
+        },
+        hoverStateEnabled: {
+          default: true,
+          reflectToAttribute: true,
+        },
+        items: {
+          type: Array,
+          default: [],
+        },
+        itemTemplate: 'app-list-item',
+        groupTemplate: 'app-list-group',
+        selectionMode: {
+          type: String,
+          default: 'none',
+          enum: ['none', 'all', 'single', 'multiple'],
+        },
+        grouped: false,
+        noDataText: '',
+        _defaultNoDataText: 'Нет данных для отображения',
+        _items: {
+          type: Array,
+          default: [],
+        },
+        _multiSelect: {
+          type: Boolean,
+          get() {
+            return ['all', 'multiple'].includes(this.selectionMode);
+          },
+        },
+        _allowSelect: {
+          type: Boolean,
+          get() {
+            return !!this.selectionMode && this.selectionMode !== 'none';
+          },
+        },
+        noData: {
+          type: Boolean,
+          get() {
+            const noItems = i => !i || !Array.isArray(i.items);
+            if (this.grouped) {
+              return this.items.every(noItems);
+            }
+            return noItems(this);
+          },
+          notify: true,
+        },
+        noItems: {
+          type: Boolean,
+          get() {
+            const noItems = i => !i || !Array.isArray(i.items) || i.items.length === 0;
+            if (this.grouped) {
+              return this.items.every(noItems);
+            }
+            return noItems(this);
+          },
+          notify: true,
+        },
+        showSelectionControls: false,
+        selectionControlsSize: 16,
+      },
+      observers: [
+        function itemsChange(items, grouped) {
+          const normalizeItem = i => {
+            const item = !!i && typeof i === 'object' ? i : { label: String(i) };
+            item.selected = !!item.selected;
+            return item;
+          };
+          const normalizeGroup = i => !!i && typeof i === 'object' && Array.isArray(i.items)
+            ? { ...i, items: i.items.map(normalizeItem) }
+            : null;
+          const normalize = grouped ? normalizeGroup : normalizeItem;
+
+          this._items = Array.isArray(items)
+            ? items.map(normalize)
+            : [];
+        },
+      ],
+      _onClickToItem(item, e, force = false) {
+        if (this._allowSelect) {
+          const selectItems = this._getUngroupedSelectedItems();
+          if (!force && (!this._multiSelect || !(e.ctrlKey || e.metaKey))) {
+            if (item.selected && selectItems.length === 1) {
+              item.selected = false;
+            } else {
+              if (!this.showSelectionControls || !this._multiSelect) {
+                this.unselectAll();
+                item.selected = true;
+              } else {
+                this._toggleSelect(item);
+              }
+            }
+          } else {
+            this._toggleSelect(item);
+          }
+          this.render();
+          this.fire('selection-change', this._getSelectedItems());
+        }
+      },
+      _toggleSelect(item) {
+        item.selected = !item.selected;
+      },
+      _getSelectedItems() {
+        const isSelected = i => i && typeof i === 'object' && i.selected;
+        if (this.grouped) {
+          return this._items
+            .map(group => ({
+              ...group,
+              items: Array.isArray(group && group.items) && group.items.filter(isSelected) || null,
+            }))
+            .filter(({ items }) => items && items.length > 0);
+        } else {
+          return this._items.filter(isSelected);
+        }
+      },
+      _getUngroupedSelectedItems() {
+        if (this.grouped) {
+          return this._getSelectedItems().map(g => g.items).flat();
+        } else {
+          return this._getSelectedItems();
+        }
+      },
+      _isItemSelected(i) {
+        return !!i.selected;
+      },
+      unselectAll(notify = false) {
+        const items = this._getUngroupedSelectedItems();
+        for (const i of items) {
+          i.selected = false;
+        }
+        if (notify) {
+          this.fire('selection-change', this._getSelectedItems());
+        }
+      },
+      _getUngroupedItems() {
+        if (this.grouped) {
+          return this._items.map(g => g.items).flat();
+        } else {
+          return this._items.slice();
+        }
+      },
+      selectAll(notify = false) {
+        const items = this._getUngroupedItems();
+        for (const i of items) {
+          if (!i) {
+            continue;
+          }
+          i.selected = true;
+        }
+        if (notify) {
+          this.fire('selection-change', this._getSelectedItems());
+        }
+      },
+    });
+  </script>
+</oda-module>
+
+<oda-module id="app-list-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px;
+      }
+    </style>
+    <div v-if="item">
+      <div v-if="item.label === undefined">
+        &nbsp;
+      </div>
+      <div v-else>{{ item.label }}</div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'app-list-item',
+      properties: {
+        item: Object,
+      },
+    });
+  </script>
+</oda-module>
+
+<oda-module id="app-list-group">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 10px;
+        color: #19478a;
+        font-size: 1.1em;
+      }
+    </style>
+    <div v-if="item">
+      <b>{{ item.label }}</b>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'app-list-group',
+      properties: {
+        item: Object,
+      },
+    });
+  </script>
+</oda-module>

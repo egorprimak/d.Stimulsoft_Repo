@@ -1,0 +1,108 @@
+<link href="../common.html" rel="import">
+
+<oda-module id="reports-report-item-list">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 10px;
+        overflow: hidden;
+      }
+
+      .layout {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+    </style>
+    <div class="layout" v-if="item">
+      <div class="label" :title="item.label">
+        {{ item.label }}
+      </div>
+      <div class="actions" v-if="item.adminMode">
+        <action-btn
+            :color="_actionBtnColor"
+            @click.stop="remove()"
+            active-color="red"
+            class="item"
+            title="Удалить"
+            v-if="!_deleting"
+        >
+          <material-icon icon="delete"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else>
+          <loading-spinner color="red" round-color="rgba(255, 0, 0, .2)" size="20"></loading-spinner>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-report-item-list',
+      extends: 'common-service',
+      properties: {
+        item: Object,
+        selected: {
+          type: Boolean,
+          get() {
+            return !!(this.item && this.item.selected);
+          },
+        },
+        _actionBtnColor: {
+          type: String,
+          get() {
+            return this.selected ? 'inherit' : '#8d8d8d';
+          },
+        },
+        report: {
+          type: Object,
+          get() {
+            return this.item && this.item.item;
+          },
+        },
+        contextItem: {
+          type: Object,
+          get() {
+            return this.item && this.item.contextItem || null;
+          },
+        },
+        _deleting: false,
+      },
+
+      remove() {
+        if (confirm(`Вы уверены, что хотите удалить отчет "${this.report.name}"?`)) {
+          this._deleting = true;
+          this._remove()
+            .catch((err) => {
+              const errMsg = err && err.message || 'Unknown error';
+              alert(`Не удалось удалить отчет "${this.report.name}"?\nError: ${errMsg}`);
+            })
+            .finally(() => {
+              this._deleting = false;
+            });
+        }
+      },
+
+      _remove() {
+        return this._removeReport(this.report);
+      },
+    });
+  </script>
+</oda-module>

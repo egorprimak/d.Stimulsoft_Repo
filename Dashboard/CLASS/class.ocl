@@ -1,0 +1,2 @@
+<?xml version="1.0"?>
+<CLASS Author="1D5412911D49A20" ClassId="1D6EE3EE7BFC08A" Date="2021-01-19T11:41:39" Name="Dashboard" Label="Формирование отчетов" Parent="1D6B0E8D28DF9EF" Update="2022-12-12T16:12:05+03:00"><SF/><STATIC><ATTR Name="needDashboardsFunctional" Label="Отображать функционал для работы с дашбордами" List="False" Type="bool"/></STATIC></CLASS>

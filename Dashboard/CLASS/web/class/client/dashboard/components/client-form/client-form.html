@@ -1,0 +1,275 @@
+<link href="../info/input-form/input-form.html" rel="import">
+<link href="../../../lib/divider.html" rel="import">
+<link href="../../../lib/button.html" rel="import">
+<link href="../common.html" rel="import">
+<link href="results.html" rel="import">
+<link href="templates/templates.html" rel="import">
+
+<oda-module id="reports-client-form">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        max-width: 800px;
+        padding-bottom: 30px;
+        height: 100%;
+      }
+
+      .divider {
+        margin: 10px 0;
+      }
+
+      .actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .actions-group {
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        padding: 0;
+        margin: 0;
+      }
+
+      .templates,
+      .results {
+        height: 400px;
+        overflow: hidden;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .input-form {
+        border: 1px solid #eee;
+        border-radius: 3px;
+      }
+
+      .divider {
+        margin: 10px 0;
+      }
+
+      .section {
+        flex: 1;
+        overflow: auto;
+        flex-shrink: 0;
+      }
+
+      .input-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 15px 25px;
+      }
+
+      .d-flex {
+        display: flex;
+      }
+
+      .align-items-center {
+        align-items: center;
+      }
+
+      .mr-1 {
+        margin-right: 5px;
+      }
+
+      .tabs {
+        display: flex;
+      }
+
+      .tab {
+        flex: 1;
+        border-radius: 0;
+        outline: none;
+      }
+    </style>
+    <div v-if="report">
+      <h2>{{ report.name }}</h2>
+    </div>
+    <div class="section">
+      <div class="panel">
+        <h4 class="title">Параметры</h4>
+      </div>
+      <report-input-form ::ready.prop="inputFormReady" :context-item.prop="contextItem" :report.prop="report"
+                         class="input-form"
+                         ref="form"></report-input-form>
+      <div class="input-actions">
+        <div class="d-flex align-items-center">
+          <loading-spinner class="mr-1" size="24" v-if="!templatesReady || generate || validating"></loading-spinner>
+          <app-button :disabled="!inputFormReady || !templatesReady || generate || validating || hasError"
+                      @click="onPrintClick()" ref="genButton"
+                      type="default">Сформировать
+          </app-button>
+        </div>
+        <app-dropdown :target.prop="$refs.genButton" :visible.prop="showDropdown" min-width="300" ref="dropdown">
+          <reports-client-form-templates :context-item.prop="contextItem" :report.prop="report"
+                                         :templates.prop="templates"
+                                         @select-template="printTemplate($event.detail.value)">
+          </reports-client-form-templates>
+        </app-dropdown>
+      </div>
+    </div>
+    <app-divider class="divider"></app-divider>
+    <div class="section">
+      <div class="tabs">
+        <app-button 
+          class="tab" 
+          :type="resultsType === 'report' ? 'default' : 'normal'" 
+          @click="resultsType = 'report'"
+        >Отчеты</app-button>
+        <app-button 
+          v-if="needDashboardsFunctional"
+          class="tab" 
+          :type="resultsType === 'dashboard' ? 'default' : 'normal'"
+          @click="resultsType = 'dashboard'"
+        >Дашборды</app-button>
+        </app-button>
+      </div>
+      <reports-client-form-results
+          :context-item.prop="contextItem"
+          :report.prop="report"
+          :no-data-text.prop="noDataText"
+          :results-type.prop="resultsType"
+          :title.prop="resultsTitle"
+          ref="results"
+      ></reports-client-form-results>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'reports-client-form',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        inputFormReady: false,
+        _generate: false,
+        showDropdown: false,
+        templates: [],
+        templatesReady: false,
+        generate: false,
+        resultsType: 'report',
+        needDashboardsFunctional: false,
+        noDataText: {
+          type: String,
+          get() {
+            return this.resultsType === 'report' ? 'Сформированные отчеты не найдены' : 'Снимки не найдены';
+          },
+        },
+        resultsTitle: {
+          type: String,
+          get() {
+            return this.resultsType === 'report' ? 'Сформированные отчеты' : 'Снимки';
+          },
+        },
+        validating: {
+          type: Boolean,
+          get() {
+            return this.$refs.form.validating;
+          },
+        },
+        hasError: {
+          type: Boolean,
+          get() {
+            return this.$refs.form.errors && this.$refs.form.errors.length > 0;
+          },
+        },
+      },
+      observers: [
+        function dataSourceChange(contextItem, report) {
+          this._updateTemplates();
+        },
+      ],
+
+      printTemplate(template) {
+        const { type = 'report' } = template;
+        this.showDropdown = false;
+        this.generate = true;
+        const input = this.getInputValues();
+
+        const objType = type === 'report'
+          ? ['Отчет', 'отчета', 'отчетов']
+          : ['Дашборд', 'дашборда', 'дашбордов'];
+
+        this._generateTemplateOfReport(template.oid, this.report.id, this._getTypeOfReport(this.report), input)
+          .then((data) => {
+            if (data === undefined) {
+              alert('Превышено время ожидания формирования ' + objType[1] + '. Готовый документ будет доступен позже в списке сформированных ' + objType[2]);
+              return;
+            }
+            if (data === 'undefined') {
+              alert('Произошла ошибка. Поробности в списке сформированных ' + objType[2]);
+            }
+
+            if (!Array.isArray(data)) {
+              return;
+            }
+            if (data.length === 1) {
+              data = data[0];
+              if (data.error) {
+                alert('Произошла ошибка: ' + String(data.error));
+              }
+              if (data.result) {
+                if (confirm(objType[0] + ' успешно сформирован. Открыть?')) {
+                  this._openResultDocument(data.result);
+                }
+              }
+            }
+          })
+          .then(() => {
+            if (this.$refs.results) {
+              setTimeout(() => {
+                this.$refs.results.update();
+              }, 500);
+            }
+          })
+          .finally(() => {
+            this.generate = false;
+          });
+      },
+
+      onPrintClick() {
+        if (this.generate || !this.templates || this.templates.length === 0) {
+          return;
+        }
+
+        if (this.templates.length === 1) {
+          this.printTemplate(this.templates[0]);
+          return;
+        }
+
+        this.showDropdown = !this.showDropdown;
+      },
+
+      _updateTemplates() {
+        this.templatesReady = false;
+        this._loadTemplates().finally(() => {
+          this.templatesReady = true;
+        });
+      },
+
+      async _loadTemplates() {
+        if (!this.contextItem || !this.report) {
+          this.templates = [];
+          return;
+        }
+
+        this.templates = await Promise.all([this._getTemplates(this.report), this._getDashboards(this.report)]).then(xs => xs.flat());
+      },
+
+      getInputValues() {
+        return { ...this.$refs.form.getItemsValues() };
+      },
+    });
+  </script>
+</oda-module>

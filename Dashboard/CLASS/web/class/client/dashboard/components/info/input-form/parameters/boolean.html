@@ -1,0 +1,68 @@
+<link href="../../../../../lib/loading-spinner.html" rel="import">
+<link href="../../../../../lib/material-icon//material-icon.html" rel="import">
+<link href="basic.html" rel="import">
+
+<oda-module id="report-input-form-parameter-boolean">
+  <template>
+    <style>
+      input[type='checkbox'] {
+        position: relative;
+        margin: 6px 0;
+      }
+    </style>
+    <div class="layout" v-if="parameter">
+      <div class="label">{{ parameter.label }}:</div>
+      <div class="input-wrapper">
+        <input :disabled="_loading" type="checkbox" v-model="value">
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-boolean',
+      extends: 'report-input-form-parameter-basic',
+
+      update() {
+        this._error = null;
+        this._loading = true;
+
+        this.getValueOfQuery()
+          .then(value => {
+            this.value = value;
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            this._error = msg;
+            this.value = this.getDefaultValue();
+          })
+          .finally(() => {
+            this._loading = false;
+          });
+      },
+
+      isParameterList() {
+        return false;
+      },
+      isMultiSelect() {
+        return false;
+      },
+      getDefaultValue() {
+        return false;
+      },
+      getDependencies() {
+        return [];
+      },
+      processQueryResult(result) {
+        if (Array.isArray(result)) {
+          const res = String(result[0]).trim().toLowerCase();
+          return !!res && res !== '0' && res !== 'false';
+        } else {
+          return !!result && typeof result === 'object';
+        }
+      },
+      getValue() {
+        return !!this.value;
+      },
+    });
+  </script>
+</oda-module>

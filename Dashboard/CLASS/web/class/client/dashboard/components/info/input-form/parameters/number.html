@@ -1,0 +1,16 @@
+<link href="string.html" rel="import">
+
+<oda-module id="report-input-form-parameter-number">
+  <script>
+    ODA({
+      is: 'report-input-form-parameter-number',
+      extends: 'report-input-form-parameter-string',
+      properties: {
+        inputType: 'number',
+      },
+      getDefaultValue() {
+        return this.isMultiSelect() ? [] : 0;
+      },
+    });
+  </script>
+</oda-module>

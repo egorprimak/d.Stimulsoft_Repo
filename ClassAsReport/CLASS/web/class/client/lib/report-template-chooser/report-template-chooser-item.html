@@ -1,0 +1,28 @@
+<oda-module id="report-template-chooser-item">
+  <template>
+    <style>
+      :host {
+        display: block;
+        padding: 5px 10px;
+      }
+    </style>
+    <div @click="open()" v-if="item">
+      {{ item.label }}
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'report-template-chooser-item',
+      properties: {
+        item: Object,
+      },
+      open() {
+        if (!this.item.id) {
+          alert('Шаблон не содержит идентификатор');
+          return;
+        }
+        this.fire('open-template', this.item.id);
+      },
+    });
+  </script>
+</oda-module>

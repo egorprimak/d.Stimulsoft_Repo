@@ -1,0 +1,251 @@
+<link href="../../../../lib/button.html" rel="import">
+<link href="../../../../lib/divider.html" rel="import">
+<link href="../../../../lib/action-btn.html" rel="import">
+<link href="../../../../lib/material-icon/material-icon.html" rel="import">
+<link href="../../common.html" rel="import">
+<link href="query-editor.html" rel="import">
+<link href="help.html" rel="import">
+
+<oda-module id="report-query-configurator">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .title {
+        padding: 3px 0;
+        margin: 0;
+      }
+
+      .panel {
+        padding: 15px 5px;
+        display: flex;
+        align-items: center;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item, .actions + .actions {
+        margin-left: 5px;
+      }
+
+      .loader {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        place-items: center;
+        place-content: center;
+      }
+
+      .hints {
+        list-style: none;
+        padding: 0;
+        margin: 10px;
+      }
+
+      .hints li {
+        font-style: italic;
+        font-size: 11px;
+        color: #999999;
+      }
+
+      .hints li:before {
+        content: '* ';
+      }
+
+      .test-actions {
+        border-radius: 50px;
+        border: 1px dashed #8d8d8d;
+      }
+
+      .instruction-visible-controller {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 10px;
+      }
+
+      .instruction-visible-controller app-button {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .instruction {
+        margin-top: 10px;
+      }
+    </style>
+    <header class="panel">
+      <h4 class="title">Параметры запроса{{_edited ? '*' : ''}}</h4>
+      <div class="spacer"></div>
+      <div class="actions">
+        <action-btn class="item" v-if="_edited && !_saving">
+          <material-icon @click="reset()" icon="undo" title="Отменить изменения"></material-icon>
+        </action-btn>
+        <action-btn class="item" v-if="_edited && !_saving">
+          <material-icon @click="save()" icon="save" title="Сохранить"></material-icon>
+        </action-btn>
+        <div class="loader item" v-else-if="_edited">
+          <loading-spinner size="20"></loading-spinner>
+        </div>
+      </div>
+      <div class="actions test-actions" v-if="!_isQueryEmpty">
+        <action-btn class="item">
+          <material-icon @click="test()" icon="play_circle_outline" title="Запустить запрос"></material-icon>
+        </action-btn>
+        <action-btn class="item" ref="testOptions">
+          <material-icon @click="showTestOptions = !showTestOptions" icon="settings"
+                         title="Параметры запуска"></material-icon>
+        </action-btn>
+      </div>
+      <app-dropdown :target.prop="$refs.testOptions" :visible.prop="showTestOptions" :min-width.prop="300">
+        <div style="padding: 10px;">
+          <div style="font-size: 12px; white-space: nowrap">
+            <table style="border-spacing: 0; border: 0;">
+              <tr>
+                <td>
+                  <label for="testTemplateType">
+                    Тип шаблона:
+                  </label>
+                </td>
+                <td>
+                  <select id="testTemplateType" v-model="testTemplateType">
+                    <option value="report">Отчет</option>
+                    <option v-if="needDashboardsFunctional" value="dashboard">Дашборд</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <label for="testUserId">[%user_id%]=</label>
+                </td>
+                <td>
+                  <input id="testUserId" type="text" v-model="testUserId">
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </app-dropdown>
+    </header>
+    <div v-if="report">
+      <report-query-editor
+          :report.prop="report"
+          @query-edited="onQueryEdited($event.detail.value)"
+          @query-source-edited="onQuerySourceEdited($event.detail.value)"
+          ref="editor"
+      ></report-query-editor>
+      <div class="instruction-visible-controller">
+        <app-button v-if="!_instructionVisible" icon="expand_more" type="normal" @click="_toggleInstruction">
+          Показать инструкцию
+        </app-button>
+        <app-button v-if="_instructionVisible" icon="expand_less" type="normal" @click="_toggleInstruction">
+          Скрыть инструкцию
+        </app-button>
+      </div>
+      <div class="instruction" v-if="_instructionVisible">
+        <app-query-help></app-query-help>
+      </div>
+    </div>
+    <p v-else>Нет данных для отображения</p>
+  </template>
+  <script>
+    ODA({
+      is: 'report-query-configurator',
+      extends: 'common-service',
+      properties: {
+        contextItem: Object,
+        report: Object,
+        query: '',
+        querySource: '',
+        showTestOptions: false,
+        testTemplateType: 'report',
+        testUserId: '',
+        needDashboardsFunctional: false,
+        _edited: false,
+        _saving: false,
+        _isQueryEmpty: {
+          type: Boolean,
+          get() {
+            return !this.query || String(this.query).trim().length === 0;
+          },
+        },
+        _instructionVisible: false,
+      },
+      async onQueryEdited(query) {
+        this.query = query;
+        this._edited = await this._isEdited();
+      },
+      async onQuerySourceEdited(querySource) {
+        this.querySource = querySource;
+        this._edited = await this._isEdited();
+      },
+      async getStructure() {
+        return this.report && await this.report.$STATIC.$object || null;
+      },
+      save() {
+        this._saving = true;
+        const { query, querySource } = this;
+        this.getStructure().then(async (structure) => {
+          Object.assign(structure.Root, {
+            query,
+            querySource,
+          });
+          await structure.save();
+          this._saving = false;
+          this._edited = await this._isEdited();
+        });
+      },
+      async test() {
+        const { $base } = this.contextItem;
+        const sourceQuery = this.query || '';
+
+        if (String(sourceQuery).trim().length === 0) {
+          alert('Текст запроса отсуствует');
+          return;
+        }
+
+        const data = await this._getInputParametersForReport(this.report, true);
+        const source = await $base.findItem(this.querySource);
+
+        if (!source) {
+          alert('Источник запроса не найден');
+          return;
+        }
+
+        const query = this._prepareQuery(sourceQuery, data, this.report, {
+          template_type: this.testTemplateType,
+          user_id: this.testUserId || this.contextItem.userId,
+        });
+
+        try {
+          const result = await this._xquery(source, query, 'xml');
+          this._showXML(result).then();
+        } catch (err) {
+          this._showError(err, 'Ошибка выполнения запроса').then();
+        }
+      },
+      async reset() {
+        if (confirm('Отменить изменения?')) {
+          this.$refs.editor && this.$refs.editor.reset();
+          this._edited = await this._isEdited();
+        }
+      },
+      async _isEdited() {
+        const structure = await this.getStructure();
+        const queryEdited = this.query !== structure.Root.query;
+        const querySourceEdited = this.querySource !== structure.Root.querySource;
+        return queryEdited || querySourceEdited;
+      },
+      _toggleInstruction() {
+        this._instructionVisible = !this._instructionVisible;
+      },
+    });
+  </script>
+</oda-module>

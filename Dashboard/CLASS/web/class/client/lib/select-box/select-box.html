@@ -1,0 +1,253 @@
+<link href="../material-icon/material-icon.html" rel="import">
+
+<oda-module id="app-select-box">
+  <template>
+    <style>
+      :host {
+        display: inline-flex;
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 150px;
+        padding: 3px;
+        border: 1px solid #767676;
+        border-radius: 3px;
+        background-color: #fff;
+        font-size: 14px;
+        outline: none;
+      }
+
+      @keyframes showItem {
+        from {
+          opacity: 0;
+          transform: scale(0);
+        }
+
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      .btn {
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
+        line-height: 0;
+        outline: none;
+        border-radius: 50%;
+      }
+
+      .btn:focus,
+      .btn:hover {
+        background-color: rgba(0, 0, 0, .1);
+      }
+
+      .selected-items {
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        display: flex;
+        padding-right: 3px;
+        border-radius: 3px;
+      }
+
+      .empty {
+        flex: 1;
+        opacity: .5;
+        cursor: pointer;
+        font-size: .9em;
+      }
+
+      .list {
+        font-size: inherit;
+      }
+
+      .multiple .item {
+        background-color: rgba(0, 0, 0, .1);
+        border-radius: 3px;
+        border: none;
+        padding: 0 5px;
+        display: inline-block;
+        display: flex;
+        align-items: center;
+      }
+
+      .item + .item {
+        position: relative;
+        margin-left: 5px;
+        animation: .1s showItem;
+      }
+
+      .clear-btn {
+        animation: .1s showItem;
+      }
+
+      .multiple .item:hover .unselect {
+        display: block;
+      }
+
+      :host([disabled]) {
+        cursor: default !important;
+        user-select: none;
+        pointer-events: none;
+        filter: contrast(.8);
+      }
+    </style>
+    <div :class="selectionMode" @click="toggleDropdown()" class="selected-items"
+         v-if="selectedItems && selectedItems.length > 0">
+      <div class="item" v-for="i of selectedItems">
+        {{ i.label }}
+      </div>
+    </div>
+    <div @click="toggleDropdown()" class="empty" v-else>{{ placeholder }}</div>
+    <button @click="clear()" class="btn clear-btn" v-if="selectedItems && selectedItems.length > 0">
+      <material-icon icon="clear" size="18"></material-icon>
+    </button>
+    <button @click="toggleDropdown()" class="btn" ref="btn">
+      <material-icon :icon="_expandIcon" size="18"></material-icon>
+    </button>
+    <app-dropdown :target.prop="host" :visible.prop="dropdownVisible" ref="dropdown">
+      <div @click.stop="onSelectAllClick()"
+           style="padding: 5px;display: flex;align-items: center;cursor: pointer; position: sticky; top: 0; font-size: 12px; background-color: #fff; box-shadow: 0 0 3px rgba(0,0,0,.2);"
+           tabindex="0" v-show="selectionMode === 'multiple' && _items && _items.length > 0">
+        <material-icon :icon="isSelectedAll() ? 'check_box' : 'check_box_outline_blank'"
+                       :size="_selectionControlsSize" style="margin-right: 5px; line-height: 0;">
+        </material-icon>
+        Выбрать все
+        <div style="margin-left: auto; padding-left: 10px;" title="Выбрано" v-show="items && items.length > 0">
+          <span v-show="selectedItems && selectedItems.length > 0 && selectedItems.length < items.length">{{selectedItems && selectedItems.length}}/</span>{{items
+          && items.length}}
+        </div>
+      </div>
+      <app-list :items.prop="_items" :no-data-text="noDataText" :selection-control-size="_selectionControlsSize"
+                :selection-mode="selectionMode" :show-selection-controls.prop="true" @selection-change.stop="_onSelectionChange($event)"
+                class="list"
+                ref="list"></app-list>
+    </app-dropdown>
+  </template>
+  <script>
+    ODA({
+      is: 'app-select-box',
+      properties: {
+        items: {
+          type: Array,
+          default: [],
+          watch(items) {
+            if (!Array.isArray(items)) {
+              this._items = [];
+            } else {
+              const selectedItemsByKeys = Object.fromEntries((this.selectedItems || []).map(i => [i.key, i]));
+              this._items = items.map(i => {
+                if (!!i && typeof i === 'object') {
+                  const value = i.value || i.label;
+                  const key = i.key === undefined ? value : i.key;
+                  return {
+                    key,
+                    value,
+                    label: value,
+                    selected: selectedItemsByKeys.hasOwnProperty(key),
+                  };
+                }
+                const value = String(i);
+                return { key: value, label: value, value, selected: selectedItemsByKeys.hasOwnProperty(value) };
+              });
+              this.selectedItems = this._items.filter(i => i.selected);
+              this.fire('selection-change', this.selectedItems.slice());
+            }
+          },
+        },
+        _items: [],
+        selectedItems: {
+          type: Array,
+          default: () => ([]),
+          notify: true,
+        },
+        selectionMode: {
+          type: String,
+          default: 'single',
+          enum: ['single', 'multiple'],
+        },
+        dropdownVisible: false,
+        _expandIcon: {
+          get() {
+            return this.dropdownVisible ? 'expand_less' : 'expand_more';
+          },
+        },
+        placeholder: 'Выберите...',
+        noDataText: 'Нет данных для отображения',
+        tabindex: {
+          reflectToAttribute: true,
+          default: 0,
+        },
+        disabled: {
+          default: false,
+          reflectToAttribute: true,
+          watch(disabled) {
+            if (disabled) {
+              this.dropdownVisible = false;
+            }
+          },
+        },
+        _selectionControlsSize: 16,
+      },
+      listeners: {
+        blur(e) {
+          if (e.relatedTarget !== this.$refs.dropdown) {
+            this.dropdownVisible = false;
+          } else {
+            this.host.focus();
+          }
+        },
+      },
+      detached() {
+        if (this.$refs.dropdown) {
+          this.$refs.dropdown.destroy();
+        }
+      },
+      toggleDropdown() {
+        this.dropdownVisible = !this.dropdownVisible;
+      },
+      clear() {
+        this.selectedItems = [];
+        if (this.$refs.list) {
+          this.$refs.list.unselectAll();
+        }
+        this.fire('selection-change', this.selectedItems.slice());
+      },
+      unselect(item) {
+        item.selected = false;
+        const idx = this.selectedItems.indexOf(item);
+        if (idx !== -1) {
+          this.selectedItems.splice(idx, 1);
+        }
+        this.fire('selection-change', this.selectedItems.slice());
+      },
+      _onSelectionChange(e) {
+        this.selectedItems = e && e.detail && Array.isArray(e.detail.value) && e.detail.value.slice() || [];
+        this.fire('selection-change', this.selectedItems.slice());
+      },
+
+      isSelectedAll() {
+        return this.selectedItemsCount() === this.itemsCount();
+      },
+
+      selectedItemsCount() {
+        return Array.isArray(this.selectedItems) ? this.selectedItems.length : 0;
+      },
+
+      itemsCount() {
+        return Array.isArray(this.items) ? this.items.length : 0;
+      },
+
+      onSelectAllClick() {
+        if (this.isSelectedAll()) {
+          this.$refs.list.unselectAll(true);
+        } else {
+          this.$refs.list.selectAll(true);
+        }
+      },
+    });
+  </script>
+</oda-module>

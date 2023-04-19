@@ -1,0 +1,111 @@
+<link href="/web/lib/code-mirror/code-mirror.html" rel="import">
+<link href="other.html" rel="import">
+
+<oda-module id="parameter-detail-boolean">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+
+      .option.default-value .editor label {
+        display: inline-flex;
+        align-items: center;
+      }
+    </style>
+    <div class="option default-value">
+      <div class="label">
+        Значение по умолчанию
+        (<label>запрос <input type="checkbox" v-model="valueIsQuery"></label>)
+      </div>
+      <div class="complex-editor" v-if="valueIsQuery">
+        <div class="option inset">
+          <div class="label">Источник запроса:</div>
+          <div class="editor flex-1">
+            <input class="w-100" type="text" v-model="sourceQuery">
+          </div>
+        </div>
+        <div class="code-editor-wrapper">
+          <oda-code-mirror ::value.prop="valueQuery" class="code-editor" mode="xquery" ref="editor">
+          </oda-code-mirror>
+        </div>
+        <ul class="hints">
+          <li>Полученное значение будет приведено к логическому типу</li>
+          <li>Ложными значениями являются: пустая строка, "0" (ноль) и "false" (регистр не учитывается)</li>
+        </ul>
+      </div>
+      <div class="editor" v-else>
+        <label>
+          <input type="checkbox" v-model="value"> {{value}}
+        </label>
+      </div>
+    </div>
+  </template>
+  <script>
+    ODA({
+      is: 'parameter-detail-boolean',
+      extends: 'parameter-detail-other',
+      properties: {
+        list: false,
+        options: Object,
+        value: false,
+        valueIsQuery: false,
+        valueQuery: '',
+        sourceQuery: '',
+      },
+      observers: [
+        function optionsChange(options) {
+          this.reset();
+          this.applyChanges();
+        },
+        function dataChangedValue(value) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedValueIsQuery(valueIsQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedValueQuery(valueQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+        function dataChangedSourceQuery(sourceQuery) {
+          this.fire('detail-edited', this.isEdited());
+        },
+      ],
+      isEdited() {
+        const d = this.options || {};
+        const valueEdited = this.value !== ODANT.getBool(d.value);
+        const valueIsQueryEdited = this.valueIsQuery !== ODA.getBool(d.valueIsQuery);
+        const valueQueryEdited = this.valueQuery !== d.valueQuery;
+        const sourceQueryEdited = this.sourceQuery !== d.sourceQuery;
+        return valueEdited || valueIsQueryEdited || valueQueryEdited || sourceQueryEdited;
+      },
+      applyChanges() {
+        if (!this.options) {
+          this.options = {};
+        }
+        Object.assign(this.options, {
+          value: this.value,
+          valueQuery: this.valueQuery,
+          valueIsQuery: this.valueIsQuery,
+          sourceQuery: this.sourceQuery,
+        });
+        this.reset();
+        this.fire('detail-edited', this.isEdited());
+      },
+      reset() {
+        if (!this.options) {
+          this.value = false;
+          this.valueIsQuery = false;
+          this.valueQuery = '';
+          this.sourceQuery = '';
+        } else {
+          const { options: d } = this;
+          this.value = ODANT.getBool(d.value);
+          this.valueIsQuery = ODANT.getBool(d.valueIsQuery);
+          this.valueQuery = d.valueQuery || '';
+          this.sourceQuery = d.sourceQuery || '';
+        }
+      },
+    });
+  </script>
+</oda-module>
